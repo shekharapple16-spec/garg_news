@@ -83,6 +83,30 @@ export function normalizeRichTextContent(value = '') {
   return normalized.trim() ? normalized : ''
 }
 
+export function normalizePlainTextContent(value = '') {
+  if (!value) {
+    return ''
+  }
+
+  return String(value)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?p\s*>/gi, '\n')
+    .replace(/<\/?div\s*>/gi, '\n')
+    .replace(/<li\b[^>]*>/gi, '\n• ')
+    .replace(/<\/?ul\s*>/gi, '\n')
+    .replace(/<\/?ol\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\r/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .trim()
+}
+
 export function detectPunjabiLanguage(value = '') {
   if (!value) {
     return 'hindi'

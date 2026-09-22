@@ -3,6 +3,7 @@ import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 import {
   detectPunjabiLanguage,
+  normalizePlainTextContent,
   normalizeRichTextContent,
   transliterateHindiToPunjabi,
   transliterateHtmlToPunjabi,
@@ -182,8 +183,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    const sanitizedContent = normalizeRichTextContent(content)
-    const plainTextContent = sanitizedContent.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+    const richContent = normalizeRichTextContent(content)
+    const sanitizedContent = normalizePlainTextContent(richContent || content)
+    const plainTextContent = sanitizedContent.trim()
     if (!plainTextContent) {
       setError('News content is required.')
       return

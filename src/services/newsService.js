@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase'
-import { normalizeRichTextContent } from '../lib/translation'
+import { normalizePlainTextContent, normalizeRichTextContent } from '../lib/translation'
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -84,7 +84,7 @@ export async function publishNewsArticle({
   isFeatured = false,
   language = 'hindi',
 }) {
-  const sanitizedContent = normalizeRichTextContent(content)
+  const sanitizedContent = normalizePlainTextContent(normalizeRichTextContent(content) || content)
 
   if (!title?.trim()) {
     throw new Error('Headline is required before publishing.')
@@ -141,7 +141,7 @@ export async function updateNewsArticle({
   isFeatured = false,
   language = 'hindi',
 }) {
-  const sanitizedContent = normalizeRichTextContent(content)
+  const sanitizedContent = normalizePlainTextContent(normalizeRichTextContent(content) || content)
 
   if (!id) {
     throw new Error('Article ID is required to update the news item.')
