@@ -1,0 +1,25 @@
+<svg width="160" height="160" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="24" y1="18" x2="138" y2="146" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#123A7A"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="46" y1="26" x2="116" y2="132" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FDE68A"/>
+      <stop offset="0.52" stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="aqua" x1="34" y1="124" x2="113" y2="63" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="12" y="12" width="136" height="136" rx="36" fill="url(#bg)"/>
+  <rect x="18" y="18" width="124" height="124" rx="30" stroke="url(#gold)" stroke-width="3"/>
+
+  <path d="M112 43H86C69.4315 43 56 56.4315 56 73V87C56 103.569 69.4315 117 86 117H104C108.418 117 112 113.418 112 109V94H96V102H85C78.3726 102 73 96.6274 73 90V70C73 63.3726 78.3726 58 85 58H112V43Z" fill="url(#aqua)"/>
+  <path d="M118 48V78H105V58H88C83.5817 58 80 61.5817 80 66V90C80 94.4183 83.5817 98 88 98H105V88H118V112H88C73.6406 112 62 100.359 62 86V70C62 55.6406 73.6406 44 88 44H118V48Z" fill="white" opacity="0.96"/>
+  <path d="M40 116C49 108.5 58.5 103.5 71 102" stroke="url(#gold)" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="119" cy="46" r="6" fill="#FDE68A"/>
+</svg>

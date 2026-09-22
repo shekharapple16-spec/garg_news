@@ -1,0 +1,200 @@
+import { supabase } from '../lib/supabase'
+
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
+export async function fetchPublishedNews() {
+  const { data, error } = await supabase
+    .from('news')
+    .select('*')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+
+  if (error) {
+    throw new Error(error.message || 'Unable to load the latest news right now.')
+  }
+
+  return data ?? []
+}
+
+export async function fetchAllNews() {
+  const { data, error } = await supabase
+    .from('news')
+    .select('*')
+    .order('published_at', { ascending: false })
+
+  if (error) {
+    throw new Error(error.message || 'Unable to load the newsroom right now.')
+  }
+
+  return data ?? []
+}
+
+export async function uploadNewsImage(file) {
+  if (!file) {
+    throw new Error('Please choose an image before publishing.')
+  }
+
+  const fileType = file.type.toLowerCase()
+  if (!ALLOWED_IMAGE_TYPES.includes(fileType)) {
+    throw new Error('Only JPG, JPEG, PNG, and WEBP images are allowed.')
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error('Image is too large. Please choose a file under 5MB.')
+  }
+
+  const extension = file.name.split('.').pop() || 'jpg'
+  const uniqueName = `news-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('news-image')
+    .upload(uniqueName, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type,
+    })
+
+  if (uploadError) {
+    throw new Error(uploadError.message || 'Image upload failed. Please try again.')
+  }
+
+  const { data: publicUrlData } = supabase.storage.from('news-image').getPublicUrl(uniqueName)
+
+  if (!publicUrlData?.publicUrl) {
+    throw new Error('Image URL could not be generated after upload.')
+  }
+
+  return publicUrlData.publicUrl
+}
+
+const getISTNow = () => {
+  const now = new Date()
+  const offsetMinutes = 330
+  const utcTime = now.getTime() + now.getTimezoneOffset() * 60000
+  return new Date(utcTime + offsetMinutes * 60000).toISOString()
+}
+
+export async function publishNewsArticle({
+  title,
+  content,
+  imageUrl,
+  isBreaking = false,
+  isFeatured = false,
+}) {
+  if (!title?.trim()) {
+    throw new Error('Headline is required before publishing.')
+  }
+
+  if (!content?.trim()) {
+    throw new Error('News content is required before publishing.')
+  }
+
+  if (!imageUrl) {
+    throw new Error('Please upload a news image before publishing.')
+  }
+
+  const payload = {
+    title: title.trim(),
+    content: content.trim(),
+    image_url: imageUrl,
+    is_breaking: Boolean(isBreaking),
+    is_featured: Boolean(isFeatured),
+    status: 'published',
+    published_at: getISTNow(),
+  }
+
+  const { data, error } = await supabase
+    .from('news')
+    .insert([payload])
+    .select()
+
+  if (error) {
+    throw new Error(error.message || 'The article could not be saved. Please try again.')
+  }
+
+  return data?.[0] ?? null
+}
+
+export async function updateNewsArticle({
+  id,
+  title,
+  content,
+  imageUrl,
+  isBreaking = false,
+  isFeatured = false,
+}) {
+  if (!id) {
+    throw new Error('Article ID is required to update the news item.')
+  }
+
+  if (!title?.trim()) {
+    throw new Error('Headline is required before saving changes.')
+  }
+
+  if (!content?.trim()) {
+    throw new Error('News content is required before saving changes.')
+  }
+
+  if (!imageUrl) {
+    throw new Error('Please keep or upload a news image before saving.')
+  }
+
+  const payload = {
+    title: title.trim(),
+    content: content.trim(),
+    image_url: imageUrl,
+    is_breaking: Boolean(isBreaking),
+    is_featured: Boolean(isFeatured),
+    updated_at: new Date().toISOString(),
+  }
+
+  const { data, error } = await supabase
+    .from('news')
+    .update(payload)
+    .eq('id', id)
+    .select()
+
+  if (error) {
+    throw new Error(error.message || 'The article could not be updated. Please try again.')
+  }
+
+  return data?.[0] ?? null
+}
+
+export async function updateNewsStatus({ id, status }) {
+  if (!id) {
+    throw new Error('Article ID is required to update the article status.')
+  }
+
+  const nextStatus = status === 'published' ? 'published' : 'draft'
+  const payload = {
+    status: nextStatus,
+    updated_at: new Date().toISOString(),
+    ...(nextStatus === 'published' && { published_at: getISTNow() }),
+  }
+
+  const { data, error } = await supabase
+    .from('news')
+    .update(payload)
+    .eq('id', id)
+    .select()
+
+  if (error) {
+    throw new Error(error.message || 'The article status could not be updated.')
+  }
+
+  return data?.[0] ?? null
+}
+
+export async function deleteNewsArticle(id) {
+  if (!id) {
+    throw new Error('Article ID is required to delete the news item.')
+  }
+
+  const { error } = await supabase.from('news').delete().eq('id', id)
+
+  if (error) {
+    throw new Error(error.message || 'The article could not be deleted.')
+  }
+}
