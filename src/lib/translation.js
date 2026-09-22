@@ -57,6 +57,32 @@ export function transliterateHtmlToPunjabi(html = '') {
     .join('')
 }
 
+export function normalizeRichTextContent(value = '') {
+  if (!value) {
+    return ''
+  }
+
+  let normalized = String(value)
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u00A0/gi, ' ')
+
+  const emptyParagraphPatterns = [
+    /<p\b[^>]*>\s*(?:<br\s*\/?>\s*)*<\/p>/gi,
+    /<p\b[^>]*>\s*(?:<span\b[^>]*>\s*(?:<br\s*\/?>\s*|\s*)\s*<\/span>\s*)*<\/p>/gi,
+    /<p\b[^>]*>\s*(?:&nbsp;|\s)*<\/p>/gi,
+  ]
+
+  let previousValue = ''
+  while (normalized !== previousValue) {
+    previousValue = normalized
+    for (const pattern of emptyParagraphPatterns) {
+      normalized = normalized.replace(pattern, '')
+    }
+  }
+
+  return normalized.trim() ? normalized : ''
+}
+
 export function detectPunjabiLanguage(value = '') {
   if (!value) {
     return 'hindi'

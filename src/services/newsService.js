@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { normalizeRichTextContent } from '../lib/translation'
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
@@ -83,11 +84,13 @@ export async function publishNewsArticle({
   isFeatured = false,
   language = 'hindi',
 }) {
+  const sanitizedContent = normalizeRichTextContent(content)
+
   if (!title?.trim()) {
     throw new Error('Headline is required before publishing.')
   }
 
-  if (!content?.trim()) {
+  if (!sanitizedContent) {
     throw new Error('News content is required before publishing.')
   }
 
@@ -97,7 +100,7 @@ export async function publishNewsArticle({
 
   const payload = {
     title: title.trim(),
-    content: content.trim(),
+    content: sanitizedContent.trim(),
     image_url: imageUrl,
     is_breaking: Boolean(isBreaking),
     is_featured: Boolean(isFeatured),
@@ -138,6 +141,8 @@ export async function updateNewsArticle({
   isFeatured = false,
   language = 'hindi',
 }) {
+  const sanitizedContent = normalizeRichTextContent(content)
+
   if (!id) {
     throw new Error('Article ID is required to update the news item.')
   }
@@ -146,7 +151,7 @@ export async function updateNewsArticle({
     throw new Error('Headline is required before saving changes.')
   }
 
-  if (!content?.trim()) {
+  if (!sanitizedContent) {
     throw new Error('News content is required before saving changes.')
   }
 
@@ -156,7 +161,7 @@ export async function updateNewsArticle({
 
   const payload = {
     title: title.trim(),
-    content: content.trim(),
+    content: sanitizedContent.trim(),
     image_url: imageUrl,
     is_breaking: Boolean(isBreaking),
     is_featured: Boolean(isFeatured),

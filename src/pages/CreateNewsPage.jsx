@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
-import { transliterateHindiToPunjabi, transliterateHtmlToPunjabi, transliteratePunjabiToHindi, detectPunjabiLanguage } from '../lib/translation'
+import {
+  detectPunjabiLanguage,
+  normalizeRichTextContent,
+  transliterateHindiToPunjabi,
+  transliterateHtmlToPunjabi,
+  transliteratePunjabiToHindi,
+} from '../lib/translation'
 import { uploadNewsImage, publishNewsArticle, updateNewsArticle } from '../services/newsService'
 
 const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp'
@@ -70,11 +76,11 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     quillRef.current = quill
 
     quill.on('text-change', () => {
-      setContent(quill.root.innerHTML)
+      setContent(normalizeRichTextContent(quill.root.innerHTML))
     })
 
     if (content) {
-      quill.clipboard.dangerouslyPasteHTML(content)
+      quill.clipboard.dangerouslyPasteHTML(normalizeRichTextContent(content) || '<p></p>')
     }
 
     return () => {
@@ -92,11 +98,11 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    const nextContent = initialArticle?.content || ''
-    const currentContent = quill.root.innerHTML
+    const nextContent = normalizeRichTextContent(initialArticle?.content || '')
+    const currentContent = normalizeRichTextContent(quill.root.innerHTML)
 
     if (currentContent !== nextContent) {
-      quill.clipboard.dangerouslyPasteHTML(nextContent)
+      quill.clipboard.dangerouslyPasteHTML(nextContent || '<p></p>')
       setContent(nextContent)
     }
   }, [initialArticle])
@@ -116,9 +122,11 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       ? transliterateHindiToPunjabi(headline)
       : transliteratePunjabiToHindi(headline)
 
-    const nextContent = nextLanguage === 'punjabi'
-      ? transliterateHtmlToPunjabi(content)
-      : transliteratePunjabiToHindi(content)
+    const nextContent = normalizeRichTextContent(
+      nextLanguage === 'punjabi'
+        ? transliterateHtmlToPunjabi(content)
+        : transliteratePunjabiToHindi(content)
+    )
 
     setHeadline(nextHeadline)
     setContent(nextContent)
@@ -174,11 +182,14 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    const plainTextContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+    const sanitizedContent = normalizeRichTextContent(content)
+    const plainTextContent = sanitizedContent.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
     if (!plainTextContent) {
       setError('News content is required.')
       return
     }
+
+    setContent(sanitizedContent)
 
     const imageUrlToSave = imageFile ? await uploadNewsImage(imageFile) : initialArticle?.image_url
 
@@ -193,7 +204,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         await updateNewsArticle({
           id: initialArticle.id,
           title: headline,
-          content,
+          content: sanitizedContent,
           imageUrl: imageUrlToSave,
           isBreaking,
           isFeatured,
@@ -208,7 +219,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
         await publishNewsArticle({
           title: headline,
-          content,
+          content: sanitizedContent,
           imageUrl,
           isBreaking,
           isFeatured,
