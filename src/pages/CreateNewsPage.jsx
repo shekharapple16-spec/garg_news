@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Quill from 'quill'
+import 'quill/dist/quill.snow.css'
+import { transliterateHindiToPunjabi, transliterateHtmlToPunjabi, transliteratePunjabiToHindi, detectPunjabiLanguage } from '../lib/translation'
 import { uploadNewsImage, publishNewsArticle, updateNewsArticle } from '../services/newsService'
 
 const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp'
 
 export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
+  const editorRef = useRef(null)
+  const quillRef = useRef(null)
   const [headline, setHeadline] = useState(initialArticle?.title || '')
   const [content, setContent] = useState(initialArticle?.content || '')
+  const [language, setLanguage] = useState(initialArticle?.language || (detectPunjabiLanguage(initialArticle?.title || '') === 'punjabi' ? 'punjabi' : 'hindi'))
   const [isBreaking, setIsBreaking] = useState(Boolean(initialArticle?.is_breaking))
   const [isFeatured, setIsFeatured] = useState(Boolean(initialArticle?.is_featured))
   const [imageFile, setImageFile] = useState(null)
@@ -18,6 +24,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   useEffect(() => {
     setHeadline(initialArticle?.title || '')
     setContent(initialArticle?.content || '')
+    setLanguage(initialArticle?.language || (detectPunjabiLanguage(initialArticle?.title || '') === 'punjabi' ? 'punjabi' : 'hindi'))
     setIsBreaking(Boolean(initialArticle?.is_breaking))
     setIsFeatured(Boolean(initialArticle?.is_featured))
     setImagePreview(initialArticle?.image_url || '')
@@ -27,12 +34,99 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   }, [initialArticle])
 
   useEffect(() => {
+    if (!editorRef.current || quillRef.current) {
+      return
+    }
+
+    const quill = new Quill(editorRef.current, {
+      theme: 'snow',
+      formats: [
+        'header',
+        'bold',
+        'italic',
+        'underline',
+        'strike',
+        'blockquote',
+        'list',
+        'indent',
+        'link',
+        'color',
+        'background',
+      ],
+      modules: {
+        toolbar: [
+          [{ header: [1, 2, 3, false] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ color: [] }, { background: [] }],
+          [{ list: 'ordered' }, { list: 'bullet' }],
+          [{ indent: '-1' }, { indent: '+1' }],
+          ['blockquote', 'link'],
+          ['clean'],
+        ],
+      },
+      placeholder: 'Write the full story here...'
+    })
+
+    quillRef.current = quill
+
+    quill.on('text-change', () => {
+      setContent(quill.root.innerHTML)
+    })
+
+    if (content) {
+      quill.clipboard.dangerouslyPasteHTML(content)
+    }
+
+    return () => {
+      quill.off('text-change')
+      quillRef.current = null
+      if (editorRef.current) {
+        editorRef.current.innerHTML = ''
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const quill = quillRef.current
+    if (!quill) {
+      return
+    }
+
+    const nextContent = initialArticle?.content || ''
+    const currentContent = quill.root.innerHTML
+
+    if (currentContent !== nextContent) {
+      quill.clipboard.dangerouslyPasteHTML(nextContent)
+      setContent(nextContent)
+    }
+  }, [initialArticle])
+
+  useEffect(() => {
     return () => {
       if (imagePreview && imagePreview.startsWith('blob:')) {
         URL.revokeObjectURL(imagePreview)
       }
     }
   }, [imagePreview])
+
+  const handleLanguageChange = (nextLanguage) => {
+    setLanguage(nextLanguage)
+
+    const nextHeadline = nextLanguage === 'punjabi'
+      ? transliterateHindiToPunjabi(headline)
+      : transliteratePunjabiToHindi(headline)
+
+    const nextContent = nextLanguage === 'punjabi'
+      ? transliterateHtmlToPunjabi(content)
+      : transliteratePunjabiToHindi(content)
+
+    setHeadline(nextHeadline)
+    setContent(nextContent)
+
+    if (quillRef.current) {
+      quillRef.current.clipboard.dangerouslyPasteHTML(nextContent || '<p></p>')
+    }
+  }
 
   const handleImageChange = (event) => {
     const file = event.target.files?.[0]
@@ -61,6 +155,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const resetForm = () => {
     setHeadline('')
     setContent('')
+    setLanguage('hindi')
     setIsBreaking(false)
     setIsFeatured(false)
     setImageFile(null)
@@ -79,7 +174,8 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    if (!content.trim()) {
+    const plainTextContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+    if (!plainTextContent) {
       setError('News content is required.')
       return
     }
@@ -101,6 +197,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
           imageUrl: imageUrlToSave,
           isBreaking,
           isFeatured,
+          language,
         })
         setSuccess('News updated successfully.')
       } else {
@@ -115,6 +212,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
           imageUrl,
           isBreaking,
           isFeatured,
+          language,
         })
 
         setSuccess('News published successfully.')
@@ -164,6 +262,26 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         </div>
 
         <div className="field-group">
+          <label>Language</label>
+          <div className="language-toggle" aria-label="News language selector">
+            <button
+              type="button"
+              className={language === 'hindi' ? 'language-option is-selected' : 'language-option'}
+              onClick={() => handleLanguageChange('hindi')}
+            >
+              Hindi
+            </button>
+            <button
+              type="button"
+              className={language === 'punjabi' ? 'language-option is-selected' : 'language-option'}
+              onClick={() => handleLanguageChange('punjabi')}
+            >
+              Punjabi
+            </button>
+          </div>
+        </div>
+
+        <div className="field-group">
           <label htmlFor="headline">Headline</label>
           <input
             id="headline"
@@ -177,13 +295,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
         <div className="field-group">
           <label htmlFor="content">News content</label>
-          <textarea
-            id="content"
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            placeholder="Write the full story here..."
-            rows={10}
-          />
+          <div className="content-editor">
+            <div ref={editorRef} className="quill-editor" aria-label="News content editor" />
+          </div>
         </div>
 
         <div className="checkbox-row">

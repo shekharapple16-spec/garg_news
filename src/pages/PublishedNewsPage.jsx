@@ -1,3 +1,5 @@
+import { detectPunjabiLanguage } from '../lib/translation'
+
 const formatDate = (value) => {
   if (!value) return 'No date'
 
@@ -77,7 +79,10 @@ export function PublishedNewsPage({
                         <img src={item.image_url} alt={item.title} className="news-table__thumb" />
                         <div className="news-table__headline-text">
                           <strong>{item.title}</strong>
-                          <small>{item.is_breaking ? 'Breaking' : 'Regular'} • {item.is_featured ? 'Featured' : 'Standard'}</small>
+                          <small>
+                            {(item.language === 'punjabi' || detectPunjabiLanguage(item.title) === 'punjabi') ? 'Punjabi' : 'Hindi'} • {' '}
+                            {item.is_breaking ? 'Breaking' : 'Regular'} • {item.is_featured ? 'Featured' : 'Standard'}
+                          </small>
                         </div>
                       </div>
                     </td>

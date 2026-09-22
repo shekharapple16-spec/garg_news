@@ -81,6 +81,7 @@ export async function publishNewsArticle({
   imageUrl,
   isBreaking = false,
   isFeatured = false,
+  language = 'hindi',
 }) {
   if (!title?.trim()) {
     throw new Error('Headline is required before publishing.')
@@ -102,12 +103,24 @@ export async function publishNewsArticle({
     is_featured: Boolean(isFeatured),
     status: 'published',
     published_at: getISTNow(),
+    language: String(language || 'hindi').toLowerCase(),
   }
 
-  const { data, error } = await supabase
-    .from('news')
-    .insert([payload])
-    .select()
+  let data
+  let error
+  try {
+    ;({ data, error } = await supabase.from('news').insert([payload]).select())
+  } catch (insertError) {
+    error = insertError
+  }
+
+  if (error) {
+    if (String(error.message).includes('language')) {
+      const fallbackPayload = { ...payload }
+      delete fallbackPayload.language
+      ;({ data, error } = await supabase.from('news').insert([fallbackPayload]).select())
+    }
+  }
 
   if (error) {
     throw new Error(error.message || 'The article could not be saved. Please try again.')
@@ -123,6 +136,7 @@ export async function updateNewsArticle({
   imageUrl,
   isBreaking = false,
   isFeatured = false,
+  language = 'hindi',
 }) {
   if (!id) {
     throw new Error('Article ID is required to update the news item.')
@@ -147,13 +161,24 @@ export async function updateNewsArticle({
     is_breaking: Boolean(isBreaking),
     is_featured: Boolean(isFeatured),
     updated_at: new Date().toISOString(),
+    language: String(language || 'hindi').toLowerCase(),
   }
 
-  const { data, error } = await supabase
-    .from('news')
-    .update(payload)
-    .eq('id', id)
-    .select()
+  let data
+  let error
+  try {
+    ;({ data, error } = await supabase.from('news').update(payload).eq('id', id).select())
+  } catch (updateError) {
+    error = updateError
+  }
+
+  if (error) {
+    if (String(error.message).includes('language')) {
+      const fallbackPayload = { ...payload }
+      delete fallbackPayload.language
+      ;({ data, error } = await supabase.from('news').update(fallbackPayload).eq('id', id).select())
+    }
+  }
 
   if (error) {
     throw new Error(error.message || 'The article could not be updated. Please try again.')

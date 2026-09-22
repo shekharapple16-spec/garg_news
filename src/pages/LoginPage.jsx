@@ -8,10 +8,10 @@ export function LoginPage({ onLogin, onSignup, error, loading, mode = 'login', o
     <div className="page-shell auth-page">
       <div className="auth-card">
         <div className="auth-card__brand">
-          <BrandLogo className="brand-mark" size={56} alt="Garg News Channel logo" />
+          <BrandLogo className="brand-mark" size={56} alt="AagazVeer logo" />
           <div>
             <p className="eyebrow">Regional newsroom</p>
-            <h1>Garg News Channel</h1>
+            <h1>AagazVeer</h1>
           </div>
         </div>
 

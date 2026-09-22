@@ -1,3 +1,5 @@
+import { detectPunjabiLanguage } from '../lib/translation'
+
 const formatDate = (value) => {
   if (!value) return 'Just now'
 
@@ -34,6 +36,7 @@ export function NewsCard({ item, onEdit, onTogglePublish, onDelete }) {
       <div className="news-card__body">
         <div className="news-card__meta">
           <span>{formatDate(item.published_at || item.created_at)}</span>
+          <span className="badge badge--neutral">{item.language === 'punjabi' || detectPunjabiLanguage(item.title) === 'punjabi' ? 'Punjabi' : 'Hindi'}</span>
           {item.is_breaking && <span className="badge badge--danger">Breaking</span>}
           {item.is_featured && <span className="badge badge--gold">Featured</span>}
         </div>

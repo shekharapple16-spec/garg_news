@@ -27,10 +27,10 @@ export function DashboardPage({
           transition={{ duration: 0.35, ease: 'easeOut', delay: 0.05 }}
         >
           <div className="cms-brand">
-            <BrandLogo className="cms-brand__mark" size={48} alt="Garg News logo" />
+            <BrandLogo className="cms-brand__mark" size={48} alt="AagazVeer logo" />
             <div>
               <p className="eyebrow">Admin</p>
-              <h2>Garg News</h2>
+              <h2>AagazVeer</h2>
             </div>
           </div>
 
@@ -62,7 +62,7 @@ export function DashboardPage({
           >
             <div>
               <p className="eyebrow">News Admin</p>
-              <h1>Garg News Channel</h1>
+              <h1>AagazVeer</h1>
               <p className="muted-text">Ferozepur, Punjab</p>
             </div>
 
