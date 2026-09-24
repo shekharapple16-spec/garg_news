@@ -1,4 +1,4 @@
-import { detectPunjabiLanguage } from '../lib/translation'
+import { detectPunjabiLanguage, normalizePlainTextContent } from '../lib/translation'
 
 const formatDate = (value) => {
   if (!value) return 'No date'
@@ -22,6 +22,15 @@ const formatDate = (value) => {
   } catch {
     return 'Recently'
   }
+}
+
+const isVideoAsset = (value) => {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const normalized = value.toLowerCase()
+  return normalized.endsWith('.mp4') || normalized.includes('/video/') || normalized.includes('video')
 }
 
 export function PublishedNewsPage({
@@ -76,11 +85,15 @@ export function PublishedNewsPage({
                   <tr key={item.id}>
                     <td>
                       <div className="news-table__headline">
-                        <img src={item.image_url} alt={item.title} className="news-table__thumb" />
+                        {isVideoAsset(item.video_url || item.image_url) ? (
+                          <video src={item.video_url || item.image_url} className="news-table__thumb video-thumb" controls muted playsInline />
+                        ) : (
+                          <img src={item.image_url} alt={normalizePlainTextContent(item.title || '') || 'News headline'} className="news-table__thumb" />
+                        )}
                         <div className="news-table__headline-text">
-                          <strong>{item.title}</strong>
+                          <strong dangerouslySetInnerHTML={{ __html: item.title || '' }} />
                           <small>
-                            {(item.language === 'punjabi' || detectPunjabiLanguage(item.title) === 'punjabi') ? 'Punjabi' : 'Hindi'} • {' '}
+                            {(item.language === 'punjabi' || detectPunjabiLanguage(normalizePlainTextContent(item.title || '')) === 'punjabi') ? 'Punjabi' : 'Hindi'} • {' '}
                             {item.is_breaking ? 'Breaking' : 'Regular'} • {item.is_featured ? 'Featured' : 'Standard'}
                           </small>
                         </div>

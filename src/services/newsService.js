@@ -1,8 +1,10 @@
 import { supabase } from '../lib/supabase'
-import { normalizePlainTextContent, normalizeRichTextContent } from '../lib/translation'
+import { normalizeHeadlineRichText, normalizePlainTextContent, normalizeRichTextContent } from '../lib/translation'
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+const ALLOWED_VIDEO_TYPES = ['video/mp4']
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const MAX_VIDEO_SIZE = 25 * 1024 * 1024
 
 export async function fetchPublishedNews() {
   const { data, error } = await supabase
@@ -31,21 +33,33 @@ export async function fetchAllNews() {
   return data ?? []
 }
 
-export async function uploadNewsImage(file) {
+export async function uploadNewsMedia(file) {
   if (!file) {
-    throw new Error('Please choose an image before publishing.')
+    throw new Error('Please choose an image or MP4 video before publishing.')
   }
 
   const fileType = file.type.toLowerCase()
-  if (!ALLOWED_IMAGE_TYPES.includes(fileType)) {
+  const isVideo = fileType.startsWith('video/') || file.name.toLowerCase().endsWith('.mp4')
+  const allowedTypes = isVideo ? ALLOWED_VIDEO_TYPES : ALLOWED_IMAGE_TYPES
+
+  if (!allowedTypes.includes(fileType)) {
+    if (isVideo) {
+      throw new Error('Only MP4 videos are allowed.')
+    }
+
     throw new Error('Only JPG, JPEG, PNG, and WEBP images are allowed.')
   }
 
-  if (file.size > MAX_IMAGE_SIZE) {
+  const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE
+  if (file.size > maxSize) {
+    if (isVideo) {
+      throw new Error('Video is too large. Please choose a file under 25MB.')
+    }
+
     throw new Error('Image is too large. Please choose a file under 5MB.')
   }
 
-  const extension = file.name.split('.').pop() || 'jpg'
+  const extension = file.name.includes('.') ? file.name.split('.').pop() : isVideo ? 'mp4' : 'jpg'
   const uniqueName = `news-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 
   const { error: uploadError } = await supabase.storage
@@ -57,16 +71,20 @@ export async function uploadNewsImage(file) {
     })
 
   if (uploadError) {
-    throw new Error(uploadError.message || 'Image upload failed. Please try again.')
+    throw new Error(uploadError.message || 'Media upload failed. Please try again.')
   }
 
   const { data: publicUrlData } = supabase.storage.from('news-image').getPublicUrl(uniqueName)
 
   if (!publicUrlData?.publicUrl) {
-    throw new Error('Image URL could not be generated after upload.')
+    throw new Error('Media URL could not be generated after upload.')
   }
 
   return publicUrlData.publicUrl
+}
+
+export async function uploadNewsImage(file) {
+  return uploadNewsMedia(file)
 }
 
 const getISTNow = () => {
@@ -98,8 +116,10 @@ export async function publishNewsArticle({
     throw new Error('Please upload a news image before publishing.')
   }
 
+  const headlineHtml = normalizeHeadlineRichText(title || '')
+
   const payload = {
-    title: title.trim(),
+    title: headlineHtml.trim(),
     content: sanitizedContent.trim(),
     image_url: imageUrl,
     is_breaking: Boolean(isBreaking),
@@ -159,8 +179,10 @@ export async function updateNewsArticle({
     throw new Error('Please keep or upload a news image before saving.')
   }
 
+  const headlineHtml = normalizeHeadlineRichText(title || '')
+
   const payload = {
-    title: title.trim(),
+    title: headlineHtml.trim(),
     content: sanitizedContent.trim(),
     image_url: imageUrl,
     is_breaking: Boolean(isBreaking),

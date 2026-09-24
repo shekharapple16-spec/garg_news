@@ -3,43 +3,242 @@ import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 import {
   detectPunjabiLanguage,
+  normalizeHeadlineRichText,
   normalizePlainTextContent,
   normalizeRichTextContent,
   transliterateHindiToPunjabi,
   transliterateHtmlToPunjabi,
   transliteratePunjabiToHindi,
 } from '../lib/translation'
-import { uploadNewsImage, publishNewsArticle, updateNewsArticle } from '../services/newsService'
+import { uploadNewsMedia, publishNewsArticle, updateNewsArticle } from '../services/newsService'
 
-const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp'
+const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp,video/mp4'
+
+const isVideoAsset = (value) => {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const normalized = value.toLowerCase()
+  return /\.(mp4|m4v)(\?.*)?$/.test(normalized) || normalized.includes('/video/') || normalized.includes('video')
+}
+
+const isImageAsset = (value) => {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const normalized = value.toLowerCase()
+  return /\.(jpe?g|png|webp|gif)(\?.*)?$/.test(normalized)
+}
+
+const getMediaTypeFromUrl = (value) => {
+  if (isVideoAsset(value)) {
+    return 'video'
+  }
+
+  if (isImageAsset(value)) {
+    return 'image'
+  }
+
+  return null
+}
+
+const getDirectMediaUrl = (value) => {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(trimmed)
+    const cleanUrl = parsed.toString()
+    const path = parsed.pathname.toLowerCase()
+
+    if (/\.(mp4|m4v)(\?.*)?$/.test(path) || cleanUrl.toLowerCase().includes('.mp4')) {
+      return cleanUrl
+    }
+
+    if (/\.(jpe?g|png|webp|gif)(\?.*)?$/.test(path) || cleanUrl.toLowerCase().includes('.jpg') || cleanUrl.toLowerCase().includes('.jpeg') || cleanUrl.toLowerCase().includes('.png') || cleanUrl.toLowerCase().includes('.webp') || cleanUrl.toLowerCase().includes('.gif')) {
+      return cleanUrl
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+const resolveMediaFromUrl = async (value) => {
+  const directMedia = getDirectMediaUrl(value)
+  if (directMedia) {
+    return directMedia
+  }
+
+  try {
+    const parsed = new URL(value)
+    const candidates = [
+      parsed.toString(),
+      `https://r.jina.ai/http://${parsed.host}${parsed.pathname}${parsed.search}`,
+      `https://r.jina.ai/http://https://${parsed.host}${parsed.pathname}${parsed.search}`,
+    ]
+
+    const seen = new Set()
+
+    for (const candidate of candidates) {
+      if (seen.has(candidate)) {
+        continue
+      }
+      seen.add(candidate)
+
+      try {
+        const response = await fetch(candidate, {
+          headers: {
+            Accept: 'text/html, text/plain, text/markdown, application/json',
+          },
+        })
+
+        if (!response.ok) {
+          continue
+        }
+
+        const text = await response.text()
+        const directMatches = [
+          ...(text.matchAll(/https?:\/\/[^\s"'<>]+\.(?:jpe?g|png|webp|gif|mp4)(?:\?[^\s"'<>]*)?/gi) || []),
+          ...(text.matchAll(/(?:og:image|twitter:image|twitter:player|og:video)\s*[:=]\s*["']?([^\s"'<>]+)["']?/gi) || []),
+        ]
+
+        for (const match of directMatches) {
+          const extractedUrl = (match[1] || match[0] || '').trim().replace(/^['"]|['"]$/g, '')
+          if (extractedUrl && extractedUrl.startsWith('http')) {
+            const resolved = getDirectMediaUrl(extractedUrl)
+            if (resolved) {
+              return resolved
+            }
+          }
+        }
+      } catch {
+        continue
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
 
 export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const editorRef = useRef(null)
   const quillRef = useRef(null)
-  const [headline, setHeadline] = useState(initialArticle?.title || '')
+  const headlineEditorRef = useRef(null)
+  const headlineQuillRef = useRef(null)
+
+  const [headline, setHeadline] = useState(() => normalizeHeadlineRichText(initialArticle?.title || ''))
   const [content, setContent] = useState(initialArticle?.content || '')
   const [language, setLanguage] = useState(initialArticle?.language || (detectPunjabiLanguage(initialArticle?.title || '') === 'punjabi' ? 'punjabi' : 'hindi'))
   const [isBreaking, setIsBreaking] = useState(Boolean(initialArticle?.is_breaking))
   const [isFeatured, setIsFeatured] = useState(Boolean(initialArticle?.is_featured))
-  const [imageFile, setImageFile] = useState(null)
-  const [imagePreview, setImagePreview] = useState(initialArticle?.image_url || '')
+  const [mediaFile, setMediaFile] = useState(null)
+  const [mediaUrl, setMediaUrl] = useState(initialArticle?.video_url || initialArticle?.image_url || '')
+  const [mediaType, setMediaType] = useState(() => {
+    const existingMedia = initialArticle?.video_url || initialArticle?.image_url || ''
+    return getMediaTypeFromUrl(existingMedia) || (isVideoAsset(existingMedia) ? 'video' : 'image')
+  })
+  const [imagePreview, setImagePreview] = useState(initialArticle?.video_url || initialArticle?.image_url || '')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
-    setHeadline(initialArticle?.title || '')
+    const cleanTitle = normalizeHeadlineRichText(initialArticle?.title || '')
+    setHeadline(cleanTitle)
     setContent(initialArticle?.content || '')
     setLanguage(initialArticle?.language || (detectPunjabiLanguage(initialArticle?.title || '') === 'punjabi' ? 'punjabi' : 'hindi'))
     setIsBreaking(Boolean(initialArticle?.is_breaking))
     setIsFeatured(Boolean(initialArticle?.is_featured))
-    setImagePreview(initialArticle?.image_url || '')
-    setImageFile(null)
+    const existingMedia = initialArticle?.video_url || initialArticle?.image_url || ''
+    setMediaUrl(existingMedia)
+    setMediaType(getMediaTypeFromUrl(existingMedia) || (isVideoAsset(existingMedia) ? 'video' : 'image'))
+    setImagePreview(existingMedia)
+    setMediaFile(null)
     setError('')
     setSuccess('')
   }, [initialArticle])
 
+  useEffect(() => {
+    if (!headlineEditorRef.current || headlineQuillRef.current) {
+      return
+    }
+
+    const quill = new Quill(headlineEditorRef.current, {
+      theme: 'snow',
+      formats: [
+        'font',
+        'size',
+        'bold',
+        'italic',
+        'underline',
+        'strike',
+        'color',
+        'background',
+        'align',
+        'clean',
+      ],
+      modules: {
+        toolbar: [
+          [{ font: [] }, { size: ['small', false, 'large', 'huge'] }, { align: [] }],
+          ['bold', 'italic', 'underline', 'strike'],
+          [{ color: [] }, { background: [] }],
+          ['undo', 'redo', 'clean'],
+        ],
+        history: {
+          delay: 500,
+          maxStack: 100,
+          userOnly: true,
+        },
+      },
+      placeholder: 'Enter the headline (Max 300 characters)',
+    })
+
+    headlineQuillRef.current = quill
+
+    quill.on('text-change', () => {
+      setHeadline(normalizeHeadlineRichText(quill.root.innerHTML))
+    })
+
+    const initialHeadline = normalizeHeadlineRichText(initialArticle?.title || headline || '')
+    if (initialHeadline) {
+      quill.clipboard.dangerouslyPasteHTML(initialHeadline)
+    }
+
+    return () => {
+      quill.off('text-change')
+      headlineQuillRef.current = null
+      if (headlineEditorRef.current) {
+        headlineEditorRef.current.innerHTML = ''
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (headlineQuillRef.current) {
+      const nextHeadline = normalizeHeadlineRichText(initialArticle?.title || '')
+      const currentHeadline = normalizeHeadlineRichText(headlineQuillRef.current.root.innerHTML)
+
+      if (currentHeadline !== nextHeadline) {
+        headlineQuillRef.current.clipboard.dangerouslyPasteHTML(nextHeadline || '<p></p>')
+        setHeadline(nextHeadline)
+      }
+    }
+  }, [initialArticle])
+
+  // Content Quill Editor Initialization
   useEffect(() => {
     if (!editorRef.current || quillRef.current) {
       return
@@ -95,16 +294,13 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
   useEffect(() => {
     const quill = quillRef.current
-    if (!quill) {
-      return
-    }
-
-    const nextContent = normalizeRichTextContent(initialArticle?.content || '')
-    const currentContent = normalizeRichTextContent(quill.root.innerHTML)
-
-    if (currentContent !== nextContent) {
-      quill.clipboard.dangerouslyPasteHTML(nextContent || '<p></p>')
-      setContent(nextContent)
+    if (quill) {
+      const nextContent = normalizeRichTextContent(initialArticle?.content || '')
+      const currentContent = normalizeRichTextContent(quill.root.innerHTML)
+      if (currentContent !== nextContent) {
+        quill.clipboard.dangerouslyPasteHTML(nextContent || '<p></p>')
+        setContent(nextContent)
+      }
     }
   }, [initialArticle])
 
@@ -119,9 +315,11 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const handleLanguageChange = (nextLanguage) => {
     setLanguage(nextLanguage)
 
-    const nextHeadline = nextLanguage === 'punjabi'
-      ? transliterateHindiToPunjabi(headline)
-      : transliteratePunjabiToHindi(headline)
+    const nextHeadline = normalizeHeadlineRichText(
+      nextLanguage === 'punjabi'
+        ? transliterateHtmlToPunjabi(headline)
+        : transliteratePunjabiToHindi(headline)
+    )
 
     const nextContent = normalizeRichTextContent(
       nextLanguage === 'punjabi'
@@ -131,6 +329,10 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
     setHeadline(nextHeadline)
     setContent(nextContent)
+
+    if (headlineQuillRef.current) {
+      headlineQuillRef.current.clipboard.dangerouslyPasteHTML(nextHeadline || '<p></p>')
+    }
 
     if (quillRef.current) {
       quillRef.current.clipboard.dangerouslyPasteHTML(nextContent || '<p></p>')
@@ -143,22 +345,74 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    const fileType = file.type.toLowerCase()
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    const fileType = (file.type || '').toLowerCase()
+    const fileName = (file.name || '').toLowerCase()
+    const isVideo = fileType.startsWith('video/') || fileName.endsWith('.mp4') || fileName.endsWith('.m4v')
+    const normalizedType = fileType || (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') ? 'image/jpeg' : fileName.endsWith('.png') ? 'image/png' : fileName.endsWith('.webp') ? 'image/webp' : fileName.endsWith('.mp4') ? 'video/mp4' : '')
+    const allowed = isVideo ? ['video/mp4'] : ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 
-    if (!allowed.includes(fileType)) {
-      setError('Only JPG, JPEG, PNG, and WEBP images are supported.')
+    if (!allowed.includes(normalizedType)) {
+      setError(isVideo ? 'Only MP4 videos are supported.' : 'Only JPG, JPEG, PNG, and WEBP images are supported.')
       return
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image must be smaller than 5 MB.')
+    const maxSize = isVideo ? 25 * 1024 * 1024 : 5 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError(isVideo ? 'Video must be smaller than 25 MB.' : 'Image must be smaller than 5 MB.')
       return
     }
 
     setError('')
-    setImageFile(file)
+    setMediaFile(file)
+    setMediaUrl('')
+    setMediaType(isVideo ? 'video' : 'image')
     setImagePreview(URL.createObjectURL(file))
+  }
+
+  const handleMediaUrlChange = async (event) => {
+    const nextValue = event.target.value.trim()
+    setMediaUrl(nextValue)
+
+    if (!nextValue) {
+      setMediaFile(null)
+      setMediaType('image')
+      setImagePreview('')
+      setError('')
+      return
+    }
+
+    try {
+      const parsedUrl = new URL(nextValue)
+      const isAllowedHttp = ['http:', 'https:'].includes(parsedUrl.protocol)
+      if (!isAllowedHttp) {
+        setError('Please paste a valid public http or https media URL.')
+        return
+      }
+
+      const directMedia = getDirectMediaUrl(nextValue)
+      if (directMedia) {
+        setMediaType(getMediaTypeFromUrl(directMedia) || 'image')
+        setError('')
+        setMediaFile(null)
+        setImagePreview(directMedia)
+        return
+      }
+
+      setError('Checking this article link for a main image or video...')
+      const resolvedMedia = await resolveMediaFromUrl(nextValue)
+
+      if (resolvedMedia) {
+        setMediaType(getMediaTypeFromUrl(resolvedMedia) || 'image')
+        setError('')
+        setMediaFile(null)
+        setImagePreview(resolvedMedia)
+        return
+      }
+
+      setError('Please paste a direct image or MP4 URL. If it is an article page, the app will try to detect the main media automatically.')
+    } catch {
+      setError('Please enter a valid URL for an image or MP4 video.')
+    }
   }
 
   const resetForm = () => {
@@ -167,10 +421,18 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setLanguage('hindi')
     setIsBreaking(false)
     setIsFeatured(false)
-    setImageFile(null)
+    setMediaFile(null)
+    setMediaUrl('')
+    setMediaType('image')
     setImagePreview('')
     setError('')
     setSuccess('')
+    if (headlineQuillRef.current) {
+      headlineQuillRef.current.root.innerHTML = ''
+    }
+    if (quillRef.current) {
+      quillRef.current.root.innerHTML = ''
+    }
   }
 
   const handleSubmit = async (event) => {
@@ -178,12 +440,14 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setError('')
     setSuccess('')
 
-    if (!headline.trim()) {
+    const headlineHtml = normalizeHeadlineRichText(headline)
+    const cleanHeadline = normalizePlainTextContent(headlineHtml).trim().slice(0, 300)
+    if (!cleanHeadline) {
       setError('Headline is required.')
       return
     }
 
-    const richContent = normalizeRichTextContent(content)
+    const richContent = quillRef.current ? quillRef.current.root.innerHTML : content
     const sanitizedContent = normalizePlainTextContent(richContent || content)
     const plainTextContent = sanitizedContent.trim()
     if (!plainTextContent) {
@@ -191,12 +455,12 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    setContent(sanitizedContent)
+    const finalHtmlContent = normalizeRichTextContent(richContent || content)
 
-    const imageUrlToSave = imageFile ? await uploadNewsImage(imageFile) : initialArticle?.image_url
+    const mediaUrlToSave = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || initialArticle?.video_url || initialArticle?.image_url
 
-    if (!imageUrlToSave) {
-      setError('Please select a cover image before publishing.')
+    if (!mediaUrlToSave) {
+      setError('Please select a cover image or MP4 video, or paste a direct media URL before publishing.')
       return
     }
 
@@ -205,9 +469,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         setIsSaving(true)
         await updateNewsArticle({
           id: initialArticle.id,
-          title: headline,
-          content: sanitizedContent,
-          imageUrl: imageUrlToSave,
+          title: headlineHtml,
+          content: finalHtmlContent,
+          imageUrl: mediaUrlToSave,
           isBreaking,
           isFeatured,
           language,
@@ -215,14 +479,14 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         setSuccess('News updated successfully.')
       } else {
         setIsUploading(true)
-        const imageUrl = await uploadNewsImage(imageFile)
+        const finalMediaUrl = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || initialArticle?.video_url || initialArticle?.image_url
         setIsUploading(false)
         setIsSaving(true)
 
         await publishNewsArticle({
-          title: headline,
-          content: sanitizedContent,
-          imageUrl,
+          title: headlineHtml,
+          content: finalHtmlContent,
+          imageUrl: finalMediaUrl,
           isBreaking,
           isFeatured,
           language,
@@ -257,7 +521,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
       <form className="panel form-panel" onSubmit={handleSubmit}>
         <div className="field-group">
-          <label htmlFor="image-upload">News image</label>
+          <label htmlFor="image-upload">Upload media file</label>
           <input
             id="image-upload"
             type="file"
@@ -265,12 +529,25 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
             onChange={handleImageChange}
           />
 
+          <div className="field-subtext">Or paste a direct public image/video URL below.</div>
+          <input
+            type="url"
+            value={mediaUrl}
+            onChange={handleMediaUrlChange}
+            placeholder="https://example.com/image.jpg or https://example.com/video.mp4"
+            className="media-url-input"
+          />
+
           {imagePreview ? (
             <div className="image-preview-wrap">
-              <img src={imagePreview} alt="Selected news cover" className="image-preview" />
+              {mediaType === 'video' ? (
+                <video src={imagePreview} controls className="image-preview video-preview" />
+              ) : (
+                <img src={imagePreview} alt="Selected news cover" className="image-preview" />
+              )}
             </div>
           ) : (
-            <div className="image-placeholder">Upload a JPG, JPEG, PNG, or WEBP image</div>
+            <div className="image-placeholder">Upload a JPG, JPEG, PNG, WEBP image or MP4 video, or paste a direct media URL</div>
           )}
         </div>
 
@@ -295,15 +572,10 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         </div>
 
         <div className="field-group">
-          <label htmlFor="headline">Headline</label>
-          <input
-            id="headline"
-            type="text"
-            value={headline}
-            onChange={(event) => setHeadline(event.target.value)}
-            placeholder="Enter the headline"
-            maxLength={180}
-          />
+          <label htmlFor="headline">Headline (rich text)</label>
+          <div className="content-editor headline-editor">
+            <div ref={headlineEditorRef} id="headline" className="quill-editor" aria-label="Headline editor" />
+          </div>
         </div>
 
         <div className="field-group">

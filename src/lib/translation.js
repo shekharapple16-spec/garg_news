@@ -83,6 +83,31 @@ export function normalizeRichTextContent(value = '') {
   return normalized.trim() ? normalized : ''
 }
 
+export function normalizeHeadlineRichText(value = '') {
+  if (!value) {
+    return ''
+  }
+
+  const candidate = String(value).trim()
+  if (!candidate) {
+    return ''
+  }
+
+  if (/<[a-z][\s\S]*>/i.test(candidate)) {
+    const richText = normalizeRichTextContent(candidate)
+    if (richText) {
+      return richText
+    }
+  }
+
+  const escaped = candidate
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  return `<p>${escaped}</p>`
+}
+
 export function normalizePlainTextContent(value = '') {
   if (!value) {
     return ''

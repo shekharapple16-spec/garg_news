@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  normalizeHeadlineRichText,
   normalizeRichTextContent,
   transliterateHindiToPunjabi,
   transliteratePunjabiToHindi,
@@ -20,4 +21,11 @@ test('removes empty editor paragraphs before saving content', () => {
 
   assert.equal(normalizeRichTextContent(html), '<p>नमस्कार</p><p>दोस्तों</p>')
   assert.equal(normalizeRichTextContent('<p><br></p>'), '')
+})
+
+test('preserves rich headline formatting while converting legacy plain text safely', () => {
+  const richHeadline = '<p>IIT <strong>Bombay</strong> ने <span style="color: red;">Students</span> की <em>18 में से 2</em> मांगें</p>'
+
+  assert.equal(normalizeHeadlineRichText(richHeadline), richHeadline)
+  assert.equal(normalizeHeadlineRichText('IIT Bombay ने Students की 18 में से 2 मांगें'), '<p>IIT Bombay ने Students की 18 में से 2 मांगें</p>')
 })

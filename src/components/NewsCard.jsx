@@ -1,4 +1,4 @@
-import { detectPunjabiLanguage } from '../lib/translation'
+import { detectPunjabiLanguage, normalizePlainTextContent } from '../lib/translation'
 
 const formatDate = (value) => {
   if (!value) return 'Just now'
@@ -21,17 +21,33 @@ const formatDate = (value) => {
   }
 }
 
+const isVideoAsset = (value) => {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const normalized = value.toLowerCase()
+  return normalized.endsWith('.mp4') || normalized.includes('/video/') || normalized.includes('video')
+}
+
 export function NewsCard({ item, onEdit, onTogglePublish, onDelete }) {
+  const mediaUrl = item.video_url || item.image_url
+  const isVideo = isVideoAsset(mediaUrl)
+
   return (
     <article className="news-card">
-      <img
-        className="news-card__image"
-        src={item.image_url || 'https://images.unsplash.com/...'}
-        alt={item.title || 'News headline'}
-        onError={(event) => {
-          event.currentTarget.src = 'https://placehold.co/800x600/111827/ffffff?text=Garg+News'
-        }}
-      />
+      {isVideo ? (
+        <video className="news-card__image" src={mediaUrl} controls playsInline muted />
+      ) : (
+        <img
+          className="news-card__image"
+          src={mediaUrl || 'https://images.unsplash.com/...'}
+          alt={normalizePlainTextContent(item.title || 'News headline') || 'News headline'}
+          onError={(event) => {
+            event.currentTarget.src = 'https://placehold.co/800x600/111827/ffffff?text=Garg+News'
+          }}
+        />
+      )}
 
       <div className="news-card__body">
         <div className="news-card__meta">
@@ -41,7 +57,7 @@ export function NewsCard({ item, onEdit, onTogglePublish, onDelete }) {
           {item.is_featured && <span className="badge badge--gold">Featured</span>}
         </div>
 
-        <h3>{item.title}</h3>
+        <h3 dangerouslySetInnerHTML={{ __html: item.title || '' }} />
       </div>
     </article>
   )
