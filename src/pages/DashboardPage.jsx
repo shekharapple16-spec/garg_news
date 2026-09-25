@@ -7,6 +7,7 @@ export function DashboardPage({
   loading,
   onCreateNews,
   onOpenPublishedList,
+  onOpenDrafts,
   onEditNews,
   onTogglePublish,
   onDeleteNews,
@@ -41,6 +42,9 @@ export function DashboardPage({
             <button type="button" className="cms-nav__item" onClick={onOpenPublishedList}>
               Published List
             </button>
+            <button type="button" className="cms-nav__item" onClick={onOpenDrafts}>
+              Drafts
+            </button>
             <button type="button" className="cms-nav__item" onClick={onCreateNews}>
               Create News
             </button>
@@ -69,6 +73,9 @@ export function DashboardPage({
             <div className="topbar__actions">
               <button type="button" className="secondary-button" onClick={onOpenPublishedList}>
                 Published List
+              </button>
+              <button type="button" className="secondary-button" onClick={onOpenDrafts}>
+                Drafts
               </button>
               <button type="button" className="secondary-button" onClick={onCreateNews}>
                 Create News

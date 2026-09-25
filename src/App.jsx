@@ -4,18 +4,21 @@ import { supabase } from './lib/supabase'
 import { signInWithEmail, signOutUser, signUpWithEmail } from './services/authService'
 import {
   fetchPublishedNews,
+  fetchAllNews,
   updateNewsStatus,
   deleteNewsArticle,
 } from './services/newsService'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { PublishedNewsPage } from './pages/PublishedNewsPage'
+import { DraftsPage } from './pages/DraftsPage'
 import { CreateNewsPage } from './pages/CreateNewsPage'
 
 function App() {
   const [session, setSession] = useState(null)
   const [authError, setAuthError] = useState('')
   const [news, setNews] = useState([])
+  const [drafts, setDrafts] = useState([])
   const [loadingNews, setLoadingNews] = useState(true)
   const [isAuthLoading, setIsAuthLoading] = useState(true)
   const [view, setView] = useState('dashboard')
@@ -33,11 +36,21 @@ function App() {
     }
   }
 
+  const refreshDrafts = async () => {
+    try {
+      const allArticles = await fetchAllNews()
+      setDrafts(allArticles.filter((item) => item.status !== 'published'))
+    } catch (error) {
+      setDrafts([])
+    }
+  }
+
   const handleTogglePublish = async (article) => {
     try {
+      const nextStatus = article.status === 'published' ? 'draft' : 'published'
       const updatedArticle = await updateNewsStatus({
         id: article.id,
-        status: article.status === 'published' ? 'draft' : 'published',
+        status: nextStatus,
       })
 
       if (updatedArticle) {
@@ -46,9 +59,19 @@ function App() {
             .map((item) => (item.id === updatedArticle.id ? updatedArticle : item))
             .filter((item) => item.status === 'published')
         )
+
+        setDrafts((currentDrafts) => {
+          const updatedDrafts = currentDrafts.map((item) => (item.id === updatedArticle.id ? updatedArticle : item))
+          if (updatedArticle.status === 'published') {
+            return updatedDrafts.filter((item) => item.status !== 'published')
+          }
+
+          return updatedDrafts
+        })
       }
 
       await refreshNews()
+      await refreshDrafts()
     } catch (error) {
       setAuthError(error.message || 'Unable to update article status.')
     }
@@ -58,6 +81,7 @@ function App() {
     try {
       await deleteNewsArticle(id)
       await refreshNews()
+      await refreshDrafts()
     } catch (error) {
       setAuthError(error.message || 'Unable to delete article.')
     }
@@ -95,6 +119,7 @@ function App() {
 
       if (nextSession && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
         refreshNews()
+        refreshDrafts()
       }
     })
 
@@ -106,6 +131,7 @@ function App() {
   useEffect(() => {
     if (session) {
       refreshNews()
+      refreshDrafts()
     }
   }, [session])
 
@@ -187,6 +213,7 @@ function App() {
           setView('create')
         }}
         onOpenPublishedList={() => setView('published')}
+        onOpenDrafts={() => setView('drafts')}
         onEditNews={(item) => {
           setEditingArticle(item)
           setView('create')
@@ -202,6 +229,27 @@ function App() {
     return (
       <PublishedNewsPage
         news={news}
+        loading={loadingNews}
+        onBack={() => setView('dashboard')}
+        onCreateNews={() => {
+          setEditingArticle(null)
+          setView('create')
+        }}
+        onOpenDrafts={() => setView('drafts')}
+        onEditNews={(item) => {
+          setEditingArticle(item)
+          setView('create')
+        }}
+        onTogglePublish={handleTogglePublish}
+        onDeleteNews={handleDeleteNews}
+      />
+    )
+  }
+
+  if (session && view === 'drafts') {
+    return (
+      <DraftsPage
+        news={drafts}
         loading={loadingNews}
         onBack={() => setView('dashboard')}
         onCreateNews={() => {

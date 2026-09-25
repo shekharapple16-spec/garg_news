@@ -33,12 +33,11 @@ const isVideoAsset = (value) => {
   return normalized.endsWith('.mp4') || normalized.includes('/video/') || normalized.includes('video')
 }
 
-export function PublishedNewsPage({
+export function DraftsPage({
   news,
   loading,
   onBack,
   onCreateNews,
-  onOpenDrafts,
   onEditNews,
   onTogglePublish,
   onDeleteNews,
@@ -47,16 +46,13 @@ export function PublishedNewsPage({
     <div className="page-shell dashboard-page">
       <header className="topbar topbar--stacked">
         <div>
-          <p className="eyebrow">Published items</p>
-          <h1>All published stories</h1>
+          <p className="eyebrow">Draft items</p>
+          <h1>All draft stories</h1>
         </div>
 
         <div className="topbar__actions">
           <button type="button" className="secondary-button" onClick={onCreateNews}>
             Create News
-          </button>
-          <button type="button" className="secondary-button" onClick={onOpenDrafts}>
-            Drafts
           </button>
           <button type="button" className="ghost-button" onClick={onBack}>
             Back to dashboard
@@ -67,11 +63,11 @@ export function PublishedNewsPage({
       <section className="panel table-panel">
         {loading ? (
           <div className="empty-state">
-            <p>Loading published stories...</p>
+            <p>Loading draft stories...</p>
           </div>
         ) : news.length === 0 ? (
           <div className="empty-state">
-            <p>No published stories available right now.</p>
+            <p>No draft stories available right now.</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -80,7 +76,7 @@ export function PublishedNewsPage({
                 <tr>
                   <th>Headline</th>
                   <th>Status</th>
-                  <th>Published</th>
+                  <th>Updated</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -104,11 +100,11 @@ export function PublishedNewsPage({
                       </div>
                     </td>
                     <td>
-                      <span className={`status-badge ${item.status === 'published' ? 'status-badge--published' : 'status-badge--draft'}`}>
-                        {item.status === 'published' ? 'Published' : 'Draft'}
+                      <span className="status-badge status-badge--draft">
+                        Draft
                       </span>
                     </td>
-                    <td>{formatDate(item.published_at || item.created_at)}</td>
+                    <td>{formatDate(item.updated_at || item.created_at || item.published_at)}</td>
                     <td>
                       <div className="table-actions">
                         <button type="button" className="ghost-button row-button" onClick={() => onEditNews?.(item)}>
@@ -119,7 +115,7 @@ export function PublishedNewsPage({
                           className="ghost-button row-button"
                           onClick={() => onTogglePublish?.(item)}
                         >
-                          Unpublish
+                          Publish
                         </button>
                         <button
                           type="button"

@@ -447,7 +447,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     const headlineHtml = normalizeHeadlineRichText(headline)
     const cleanHeadline = normalizePlainTextContent(headlineHtml).trim().slice(0, 300)
     if (!cleanHeadline) {
-      setError('Headline is required.')
+      setError('Please enter headline.')
       return
     }
 

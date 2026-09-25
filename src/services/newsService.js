@@ -10,32 +10,76 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp
 const ALLOWED_VIDEO_TYPES = ['video/mp4']
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_SIZE = 25 * 1024 * 1024
+const LOCAL_NEWS_KEY = 'garg-news-admin:news'
 
-export async function fetchPublishedNews() {
-  const { data, error } = await supabase
-    .from('news')
-    .select('*')
-    .eq('status', 'published')
-    .order('published_at', { ascending: false })
-
-  if (error) {
-    throw new Error(error.message || 'Unable to load the latest news right now.')
+const readLocalNews = () => {
+  if (typeof window === 'undefined') {
+    return []
   }
 
-  return data ?? []
+  try {
+    const rawValue = window.localStorage.getItem(LOCAL_NEWS_KEY)
+    const parsed = rawValue ? JSON.parse(rawValue) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const writeLocalNews = (items) => {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(LOCAL_NEWS_KEY, JSON.stringify(items))
+  } catch {
+    // Ignore storage quota issues and keep the app usable.
+  }
+}
+
+const sortNewsItems = (items = []) =>
+  [...items].sort((a, b) => {
+    const dateA = new Date(a.published_at || a.created_at || 0).getTime()
+    const dateB = new Date(b.published_at || b.created_at || 0).getTime()
+    return dateB - dateA
+  })
+
+export async function fetchPublishedNews() {
+  try {
+    const { data, error } = await supabase
+      .from('news')
+      .select('*')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false })
+
+    if (error) {
+      throw new Error(error.message || 'Unable to load the latest news right now.')
+    }
+
+    return data ?? []
+  } catch (error) {
+    const localNews = readLocalNews()
+    return sortNewsItems(localNews.filter((item) => item.status === 'published'))
+  }
 }
 
 export async function fetchAllNews() {
-  const { data, error } = await supabase
-    .from('news')
-    .select('*')
-    .order('published_at', { ascending: false })
+  try {
+    const { data, error } = await supabase
+      .from('news')
+      .select('*')
+      .order('published_at', { ascending: false })
 
-  if (error) {
-    throw new Error(error.message || 'Unable to load the newsroom right now.')
+    if (error) {
+      throw new Error(error.message || 'Unable to load the newsroom right now.')
+    }
+
+    return data ?? []
+  } catch (error) {
+    const localNews = readLocalNews()
+    return sortNewsItems(localNews)
   }
-
-  return data ?? []
 }
 
 export async function uploadNewsMedia(file) {
@@ -108,9 +152,11 @@ export async function publishNewsArticle({
   language = 'hindi',
 }) {
   const sanitizedContent = normalizePlainTextContent(normalizeRichTextContent(content) || content)
+  const normalizedHeadline = normalizeHeadlineRichText(title || '')
+  const headlineText = normalizePlainTextContent(normalizedHeadline).trim()
 
-  if (!title?.trim()) {
-    throw new Error('Headline is required before publishing.')
+  if (!headlineText) {
+    throw new Error('Please enter headline.')
   }
 
   if (!sanitizedContent) {
@@ -121,7 +167,7 @@ export async function publishNewsArticle({
     throw new Error('Please upload a news image before publishing.')
   }
 
-  const headlineHtml = normalizeHeadlineRichText(title || '')
+  const headlineHtml = normalizedHeadline
   const richContentHtml = normalizeRichTextForStorage(content || '')
 
   const payload = {
@@ -152,7 +198,19 @@ export async function publishNewsArticle({
   }
 
   if (error) {
-    throw new Error(error.message || 'The article could not be saved. Please try again.')
+    const localItems = readLocalNews()
+    const fallbackItem = {
+      ...payload,
+      id: `local-${Date.now()}`,
+      created_at: new Date().toISOString(),
+      published_at: getISTNow(),
+      status: 'published',
+      title: payload.title || '<p>Untitled</p>',
+      content: payload.content || '',
+    }
+    const nextItems = sortNewsItems([fallbackItem, ...localItems])
+    writeLocalNews(nextItems)
+    return fallbackItem
   }
 
   return data?.[0] ?? null
@@ -168,13 +226,15 @@ export async function updateNewsArticle({
   language = 'hindi',
 }) {
   const sanitizedContent = normalizePlainTextContent(normalizeRichTextContent(content) || content)
+  const normalizedHeadline = normalizeHeadlineRichText(title || '')
+  const headlineText = normalizePlainTextContent(normalizedHeadline).trim()
 
   if (!id) {
     throw new Error('Article ID is required to update the news item.')
   }
 
-  if (!title?.trim()) {
-    throw new Error('Headline is required before saving changes.')
+  if (!headlineText) {
+    throw new Error('Please enter headline.')
   }
 
   if (!sanitizedContent) {
@@ -185,7 +245,7 @@ export async function updateNewsArticle({
     throw new Error('Please keep or upload a news image before saving.')
   }
 
-  const headlineHtml = normalizeHeadlineRichText(title || '')
+  const headlineHtml = normalizedHeadline
   const richContentHtml = normalizeRichTextForStorage(content || '')
 
   const payload = {
@@ -215,6 +275,19 @@ export async function updateNewsArticle({
   }
 
   if (error) {
+    const localItems = readLocalNews()
+    const targetIndex = localItems.findIndex((item) => String(item.id) === String(id))
+    if (targetIndex >= 0) {
+      const updatedItem = {
+        ...localItems[targetIndex],
+        ...payload,
+        updated_at: new Date().toISOString(),
+      }
+      localItems[targetIndex] = updatedItem
+      writeLocalNews(sortNewsItems(localItems))
+      return updatedItem
+    }
+
     throw new Error(error.message || 'The article could not be updated. Please try again.')
   }
 

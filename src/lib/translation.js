@@ -96,8 +96,17 @@ export function normalizeHeadlineRichText(value = '') {
   if (/<[a-z][\s\S]*>/i.test(candidate)) {
     const richText = normalizeRichTextContent(candidate)
     if (richText) {
+      const plainText = normalizePlainTextContent(richText).trim()
+      if (!plainText) {
+        return ''
+      }
       return richText
     }
+  }
+
+  const plainText = normalizePlainTextContent(candidate).trim()
+  if (!plainText) {
+    return ''
   }
 
   const escaped = candidate

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   normalizeHeadlineRichText,
+  normalizePlainTextContent,
   normalizeRichTextContent,
   normalizeRichTextForStorage,
   transliterateHindiToPunjabi,
@@ -41,4 +42,10 @@ test('keeps rich editor HTML intact and converts legacy plain text into paragrap
     normalizeRichTextForStorage('Paragraph 1\n\nParagraph 2\n\nParagraph 3'),
     '<p>Paragraph 1</p><p>Paragraph 2</p><p>Paragraph 3</p>'
   )
+})
+
+test('treats blank rich-text headlines as empty so the form can block empty submissions', () => {
+  assert.equal(normalizeHeadlineRichText('<p><br></p>'), '')
+  assert.equal(normalizeHeadlineRichText('<p>&nbsp;</p>'), '')
+  assert.equal(normalizePlainTextContent('<p><br></p>'), '')
 })
