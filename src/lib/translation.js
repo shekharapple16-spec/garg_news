@@ -108,6 +108,43 @@ export function normalizeHeadlineRichText(value = '') {
   return `<p>${escaped}</p>`
 }
 
+export function normalizeRichTextForStorage(value = '') {
+  if (!value) {
+    return ''
+  }
+
+  const candidate = String(value).trim()
+  if (!candidate) {
+    return ''
+  }
+
+  if (/<[a-z][\s\S]*>/i.test(candidate)) {
+    return normalizeRichTextContent(candidate) || ''
+  }
+
+  const segments = candidate
+    .replace(/\r\n?/g, '\n')
+    .split(/\n\s*\n+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  if (!segments.length) {
+    return ''
+  }
+
+  return segments
+    .map((segment) => {
+      const escaped = segment
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>')
+
+      return `<p>${escaped}</p>`
+    })
+    .join('')
+}
+
 export function normalizePlainTextContent(value = '') {
   if (!value) {
     return ''

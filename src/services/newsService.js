@@ -1,5 +1,10 @@
 import { supabase } from '../lib/supabase'
-import { normalizeHeadlineRichText, normalizePlainTextContent, normalizeRichTextContent } from '../lib/translation'
+import {
+  normalizeHeadlineRichText,
+  normalizePlainTextContent,
+  normalizeRichTextContent,
+  normalizeRichTextForStorage,
+} from '../lib/translation'
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 const ALLOWED_VIDEO_TYPES = ['video/mp4']
@@ -117,10 +122,11 @@ export async function publishNewsArticle({
   }
 
   const headlineHtml = normalizeHeadlineRichText(title || '')
+  const richContentHtml = normalizeRichTextForStorage(content || '')
 
   const payload = {
     title: headlineHtml.trim(),
-    content: sanitizedContent.trim(),
+    content: richContentHtml || sanitizedContent.trim(),
     image_url: imageUrl,
     is_breaking: Boolean(isBreaking),
     is_featured: Boolean(isFeatured),
@@ -180,10 +186,11 @@ export async function updateNewsArticle({
   }
 
   const headlineHtml = normalizeHeadlineRichText(title || '')
+  const richContentHtml = normalizeRichTextForStorage(content || '')
 
   const payload = {
     title: headlineHtml.trim(),
-    content: sanitizedContent.trim(),
+    content: richContentHtml || sanitizedContent.trim(),
     image_url: imageUrl,
     is_breaking: Boolean(isBreaking),
     is_featured: Boolean(isFeatured),
