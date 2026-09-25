@@ -248,6 +248,8 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       theme: 'snow',
       formats: [
         'header',
+        'font',
+        'size',
         'bold',
         'italic',
         'underline',
@@ -258,10 +260,12 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         'link',
         'color',
         'background',
+        'align',
       ],
       modules: {
         toolbar: [
           [{ header: [1, 2, 3, false] }],
+          [{ font: [] }, { size: ['small', false, 'large', 'huge'] }, { align: [] }],
           ['bold', 'italic', 'underline', 'strike'],
           [{ color: [] }, { background: [] }],
           [{ list: 'ordered' }, { list: 'bullet' }],

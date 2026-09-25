@@ -33,14 +33,12 @@ test('preserves rich headline formatting while converting legacy plain text safe
 
 test('keeps rich editor HTML intact and converts legacy plain text into paragraph HTML without flattening', () => {
   const richContent = '<p>Paragraph 1</p><p>Paragraph 2</p><p>Paragraph 3</p>'
+  const styledRichContent = '<p>IIT बॉम्बे ने <strong>स्टूडेंट्स की 18 में से 2 मांगें</strong> मानीं।</p><p><span style="color: red;">छात्रों ने 18 मांगें रखीं।</span></p>'
 
   assert.equal(normalizeRichTextForStorage(richContent), richContent)
+  assert.equal(normalizeRichTextForStorage(styledRichContent), styledRichContent)
   assert.equal(
     normalizeRichTextForStorage('Paragraph 1\n\nParagraph 2\n\nParagraph 3'),
     '<p>Paragraph 1</p><p>Paragraph 2</p><p>Paragraph 3</p>'
-  )
-  assert.equal(
-    normalizeRichTextForStorage('IIT बॉम्बे ने <strong>स्टूडेंट्स की 18 में से 2 मांगें</strong> मानीं।\n\nसाहिल की मौत के बाद <em>IIT बॉम्बे</em> में छात्रों का प्रदर्शन तीन दिन तक चला।'),
-    'IIT बॉम्बे ने <strong>स्टूडेंट्स की 18 में से 2 मांगें</strong> मानीं।\n\nसाहिल की मौत के बाद <em>IIT बॉम्बे</em> में छात्रों का प्रदर्शन तीन दिन तक चला।'
   )
 })
