@@ -151,7 +151,9 @@ export async function publishNewsArticle({
   isFeatured = false,
   language = 'hindi',
 }) {
-  const sanitizedContent = normalizePlainTextContent(normalizeRichTextContent(content) || content)
+  const richContent = normalizeRichTextContent(content || '') || content || ''
+  const sanitizedContent = normalizePlainTextContent(richContent)
+  const hasInlineImage = /<img\b[^>]*src=/i.test(richContent)
   const normalizedHeadline = normalizeHeadlineRichText(title || '')
   const headlineText = normalizePlainTextContent(normalizedHeadline).trim()
 
@@ -159,7 +161,7 @@ export async function publishNewsArticle({
     throw new Error('Please enter headline.')
   }
 
-  if (!sanitizedContent) {
+  if (!sanitizedContent && !hasInlineImage) {
     throw new Error('News content is required before publishing.')
   }
 
@@ -225,7 +227,9 @@ export async function updateNewsArticle({
   isFeatured = false,
   language = 'hindi',
 }) {
-  const sanitizedContent = normalizePlainTextContent(normalizeRichTextContent(content) || content)
+  const richContent = normalizeRichTextContent(content || '') || content || ''
+  const sanitizedContent = normalizePlainTextContent(richContent)
+  const hasInlineImage = /<img\b[^>]*src=/i.test(richContent)
   const normalizedHeadline = normalizeHeadlineRichText(title || '')
   const headlineText = normalizePlainTextContent(normalizedHeadline).trim()
 
@@ -237,7 +241,7 @@ export async function updateNewsArticle({
     throw new Error('Please enter headline.')
   }
 
-  if (!sanitizedContent) {
+  if (!sanitizedContent && !hasInlineImage) {
     throw new Error('News content is required before saving changes.')
   }
 

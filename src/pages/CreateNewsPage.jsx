@@ -137,6 +137,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const quillRef = useRef(null)
   const headlineEditorRef = useRef(null)
   const headlineQuillRef = useRef(null)
+  const inlineImageInputRef = useRef(null)
 
   const [headline, setHeadline] = useState(() => normalizeHeadlineRichText(initialArticle?.title || ''))
   const [content, setContent] = useState(initialArticle?.content || '')
@@ -258,6 +259,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         'list',
         'indent',
         'link',
+        'image',
         'color',
         'background',
         'align',
@@ -373,6 +375,85 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setImagePreview(URL.createObjectURL(file))
   }
 
+  const handleInlineImageFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    try {
+      const fileType = (file.type || '').toLowerCase()
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+      if (!allowedTypes.includes(fileType) && !/\.(jpe?g|png|webp)$/i.test(file.name || '')) {
+        setError('Please choose a JPG, JPEG, PNG, or WEBP image for the article body.')
+        return
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Inline images must be smaller than 5MB.')
+        return
+      }
+
+      setError('')
+      setIsUploading(true)
+      const uploadedUrl = await uploadNewsMedia(file)
+      const quill = quillRef.current
+      if (!quill) {
+        throw new Error('The editor is not ready for image insertion.')
+      }
+
+      const selection = quill.getSelection(true)
+      const insertIndex = selection ? selection.index : quill.getLength()
+      quill.insertEmbed(insertIndex, 'image', uploadedUrl)
+      quill.setSelection(insertIndex + 1, 0)
+      quill.focus()
+      setContent(normalizeRichTextContent(quill.root.innerHTML))
+      setSuccess('Image added to the article.')
+      window.setTimeout(() => setSuccess(''), 1800)
+    } catch (uploadError) {
+      setError(uploadError.message || 'The image could not be uploaded to the news gallery.')
+    } finally {
+      setIsUploading(false)
+      if (inlineImageInputRef.current) {
+        inlineImageInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleRemoveSelectedImage = () => {
+    const quill = quillRef.current
+    if (!quill) {
+      return
+    }
+
+    const selection = quill.getSelection(true)
+    if (!selection) {
+      setError('Select an image in the article body before removing it.')
+      return
+    }
+
+    const leaf = quill.getLeaf(selection.index)
+    const blot = leaf && leaf.constructor && leaf.constructor.blotName === 'image' ? leaf : null
+
+    if (!blot) {
+      const line = quill.getLine(selection.index)
+      const imageNode = line?.domNode?.querySelector?.('img')
+      if (!imageNode) {
+        setError('Please place the cursor on an inserted image to remove it.')
+        return
+      }
+    }
+
+    const indexToDelete = blot ? quill.getIndex(blot) : Math.max(selection.index - 1, 0)
+    quill.deleteText(indexToDelete, 1)
+    setContent(normalizeRichTextContent(quill.root.innerHTML))
+    setError('')
+  }
+
+  const handleOpenImagePicker = () => {
+    inlineImageInputRef.current?.click()
+  }
+
   const handleMediaUrlChange = async (event) => {
     const nextValue = event.target.value.trim()
     setMediaUrl(nextValue)
@@ -454,7 +535,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     const richContent = quillRef.current ? quillRef.current.root.innerHTML : content
     const sanitizedContent = normalizePlainTextContent(richContent || content)
     const plainTextContent = sanitizedContent.trim()
-    if (!plainTextContent) {
+    const hasInlineImage = /<img\b[^>]*src=/i.test(richContent || content || '')
+
+    if (!plainTextContent && !hasInlineImage) {
       setError('News content is required.')
       return
     }
@@ -585,7 +668,22 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         <div className="field-group">
           <label htmlFor="content">News content</label>
           <div className="content-editor">
+            <div className="content-editor__tools">
+              <button type="button" className="secondary-button inline-media-action" onClick={handleOpenImagePicker} disabled={isUploading || isSaving}>
+                {isUploading ? 'Uploading...' : 'Add image'}
+              </button>
+              <button type="button" className="ghost-button inline-media-action inline-media-action--muted" onClick={handleRemoveSelectedImage} disabled={isUploading || isSaving}>
+                Remove selected image
+              </button>
+            </div>
             <div ref={editorRef} className="quill-editor" aria-label="News content editor" />
+            <input
+              ref={inlineImageInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              hidden
+              onChange={handleInlineImageFileChange}
+            />
           </div>
         </div>
 

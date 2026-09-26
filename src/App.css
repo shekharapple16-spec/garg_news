@@ -290,6 +290,26 @@
   margin-top: 0.5rem;
 }
 
+.content-editor__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.inline-media-action {
+  min-height: 40px;
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+}
+
+.inline-media-action--muted {
+  background: linear-gradient(135deg, #e2e8f0 0%, #f8fafc 100%);
+  border-color: rgba(148, 163, 184, 0.6);
+  color: #0f172a;
+  box-shadow: none;
+}
+
 .quill-editor {
   min-height: 300px;
   background: #fff;
@@ -316,6 +336,19 @@
 .quill-editor .ql-editor {
   min-height: 260px;
   padding: 16px;
+}
+
+.quill-editor .ql-editor img {
+  display: block;
+  max-width: min(100%, 720px);
+  height: auto;
+  margin: 1rem auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.quill-editor .ql-editor p {
+  margin: 0.75rem 0;
 }
 
 .quill-editor .ql-editor.ql-blank::before {

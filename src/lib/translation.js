@@ -65,6 +65,7 @@ export function normalizeRichTextContent(value = '') {
   let normalized = String(value)
     .replace(/&nbsp;/gi, ' ')
     .replace(/\u00A0/gi, ' ')
+    .replace(/<img\b([^>]*)>/gi, '<img$1>')
 
   const emptyParagraphPatterns = [
     /<p\b[^>]*>\s*(?:<br\s*\/?>\s*)*<\/p>/gi,
@@ -160,6 +161,7 @@ export function normalizePlainTextContent(value = '') {
   }
 
   return String(value)
+    .replace(/<img\b[^>]*src=(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>/gi, '\n[image]\n')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/?p\s*>/gi, '\n')
     .replace(/<\/?div\s*>/gi, '\n')

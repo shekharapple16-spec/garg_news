@@ -44,6 +44,14 @@ test('keeps rich editor HTML intact and converts legacy plain text into paragrap
   )
 })
 
+test('preserves inline img tags in the article body so image order survives save and edit cycles', () => {
+  const richContent = '<p>Text before</p><p><img src="https://cdn.example.com/one.jpg" /></p><p>Text middle</p><p><img src="https://cdn.example.com/two.jpg" /></p><p>Text after</p>'
+
+  assert.equal(normalizeRichTextContent(richContent), richContent)
+  assert.equal(normalizeRichTextForStorage(richContent), richContent)
+  assert.equal(normalizePlainTextContent(richContent), 'Text before\n\n[image]\n\nText middle\n\n[image]\n\nText after')
+})
+
 test('treats blank rich-text headlines as empty so the form can block empty submissions', () => {
   assert.equal(normalizeHeadlineRichText('<p><br></p>'), '')
   assert.equal(normalizeHeadlineRichText('<p>&nbsp;</p>'), '')
