@@ -1,15 +1,20 @@
-import { supabase } from '../lib/supabase'
+import { getStoragePathFromPublicUrl as getStoragePathFromSupabaseUrl } from '../lib/mediaPaths.js'
+import {
+  ALLOWED_IMAGE_TYPES,
+  ALLOWED_VIDEO_TYPES,
+  MAX_IMAGE_SIZE,
+  MAX_VIDEO_SIZE,
+  optimizeNewsImageFile,
+  validateMediaSelection,
+} from '../lib/mediaOptimization.js'
+import { supabase } from '../lib/supabase.js'
 import {
   normalizeHeadlineRichText,
   normalizePlainTextContent,
   normalizeRichTextContent,
   normalizeRichTextForStorage,
-} from '../lib/translation'
+} from '../lib/translation.js'
 
-const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-const ALLOWED_VIDEO_TYPES = ['video/mp4']
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024
-const MAX_VIDEO_SIZE = 25 * 1024 * 1024
 const LOCAL_NEWS_KEY = 'garg-news-admin:news'
 
 const readLocalNews = () => {
@@ -87,11 +92,14 @@ export async function uploadNewsMedia(file) {
     throw new Error('Please choose an image or MP4 video before publishing.')
   }
 
-  const fileType = file.type.toLowerCase()
-  const isVideo = fileType.startsWith('video/') || file.name.toLowerCase().endsWith('.mp4')
+  const mediaInfo = await validateMediaSelection(file)
+  const optimizedFile = mediaInfo.kind === 'image' ? await optimizeNewsImageFile(file) : file
+
+  const fileType = (optimizedFile.type || file.type || '').toLowerCase()
+  const isVideo = ALLOWED_VIDEO_TYPES.includes(fileType) || (optimizedFile.name || '').toLowerCase().endsWith('.mp4')
   const allowedTypes = isVideo ? ALLOWED_VIDEO_TYPES : ALLOWED_IMAGE_TYPES
 
-  if (!allowedTypes.includes(fileType)) {
+  if (!allowedTypes.includes(fileType) && !((optimizedFile.name || '').toLowerCase().endsWith('.mp4') || /\.(jpe?g|png|webp)$/i.test(optimizedFile.name || ''))) {
     if (isVideo) {
       throw new Error('Only MP4 videos are allowed.')
     }
@@ -99,24 +107,15 @@ export async function uploadNewsMedia(file) {
     throw new Error('Only JPG, JPEG, PNG, and WEBP images are allowed.')
   }
 
-  const maxSize = isVideo ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE
-  if (file.size > maxSize) {
-    if (isVideo) {
-      throw new Error('Video is too large. Please choose a file under 25MB.')
-    }
-
-    throw new Error('Image is too large. Please choose a file under 5MB.')
-  }
-
-  const extension = file.name.includes('.') ? file.name.split('.').pop() : isVideo ? 'mp4' : 'jpg'
+  const extension = ((optimizedFile.name || '').includes('.') ? optimizedFile.name.split('.').pop() : isVideo ? 'mp4' : 'jpg').toLowerCase()
   const uniqueName = `news-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 
   const { error: uploadError } = await supabase.storage
     .from('news-image')
-    .upload(uniqueName, file, {
+    .upload(uniqueName, optimizedFile, {
       cacheControl: '3600',
       upsert: false,
-      contentType: file.type,
+      contentType: optimizedFile.type || fileType,
     })
 
   if (uploadError) {
@@ -323,14 +322,73 @@ export async function updateNewsStatus({ id, status }) {
   return data?.[0] ?? null
 }
 
+export function getStoragePathFromPublicUrl(publicUrl) {
+  return getStoragePathFromSupabaseUrl(publicUrl)
+}
+
+export async function cleanupUnusedMedia(publicUrl) {
+  if (!publicUrl) {
+    return false
+  }
+
+  const storagePath = getStoragePathFromSupabaseUrl(publicUrl)
+  if (!storagePath) {
+    return false
+  }
+
+  const { data: referencedRows, error: referenceError } = await supabase
+    .from('news')
+    .select('id, image_url, video_url')
+    .or(`image_url.eq.${publicUrl},video_url.eq.${publicUrl}`)
+
+  if (referenceError) {
+    throw new Error(referenceError.message || 'Unable to verify media references before cleanup.')
+  }
+
+  const hasOtherReferences = (referencedRows || []).some((row) => {
+    const matchesCurrentUrl = row.image_url === publicUrl || row.video_url === publicUrl
+    return matchesCurrentUrl
+  })
+
+  if (hasOtherReferences) {
+    return false
+  }
+
+  const { error: deleteError } = await supabase.storage.from('news-image').remove([storagePath])
+  if (deleteError) {
+    throw new Error(deleteError.message || 'Unable to remove the unused media file.')
+  }
+
+  return true
+}
+
 export async function deleteNewsArticle(id) {
   if (!id) {
     throw new Error('Article ID is required to delete the news item.')
+  }
+
+  const { data: articleRows, error: fetchError } = await supabase
+    .from('news')
+    .select('id, image_url, video_url')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (fetchError) {
+    throw new Error(fetchError.message || 'The article could not be loaded for cleanup.')
   }
 
   const { error } = await supabase.from('news').delete().eq('id', id)
 
   if (error) {
     throw new Error(error.message || 'The article could not be deleted.')
+  }
+
+  const mediaUrls = [articleRows?.image_url, articleRows?.video_url].filter(Boolean)
+  for (const mediaUrl of mediaUrls) {
+    try {
+      await cleanupUnusedMedia(mediaUrl)
+    } catch {
+      // Leave orphaned media alone if cleanup cannot be verified safely.
+    }
   }
 }

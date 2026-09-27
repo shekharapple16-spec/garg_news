@@ -9,8 +9,14 @@ import {
   transliterateHindiToPunjabi,
   transliterateHtmlToPunjabi,
   transliteratePunjabiToHindi,
-} from '../lib/translation'
-import { uploadNewsMedia, publishNewsArticle, updateNewsArticle } from '../services/newsService'
+} from '../lib/translation.js'
+import {
+  cleanupUnusedMedia,
+  uploadNewsMedia,
+  publishNewsArticle,
+  updateNewsArticle,
+} from '../services/newsService.js'
+import { validateMediaSelection } from '../lib/mediaOptimization.js'
 
 const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp,video/mp4'
 
@@ -351,28 +357,20 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       return
     }
 
-    const fileType = (file.type || '').toLowerCase()
-    const fileName = (file.name || '').toLowerCase()
-    const isVideo = fileType.startsWith('video/') || fileName.endsWith('.mp4') || fileName.endsWith('.m4v')
-    const normalizedType = fileType || (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg') ? 'image/jpeg' : fileName.endsWith('.png') ? 'image/png' : fileName.endsWith('.webp') ? 'image/webp' : fileName.endsWith('.mp4') ? 'video/mp4' : '')
-    const allowed = isVideo ? ['video/mp4'] : ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
-
-    if (!allowed.includes(normalizedType)) {
-      setError(isVideo ? 'Only MP4 videos are supported.' : 'Only JPG, JPEG, PNG, and WEBP images are supported.')
-      return
+    try {
+      validateMediaSelection(file)
+      setError('')
+      setMediaFile(file)
+      setMediaUrl('')
+      setMediaType(file.type.startsWith('video/') || file.name.toLowerCase().endsWith('.mp4') ? 'video' : 'image')
+      setImagePreview(URL.createObjectURL(file))
+    } catch (validationError) {
+      setError(validationError.message || 'The selected file could not be accepted.')
     }
 
-    const maxSize = isVideo ? 25 * 1024 * 1024 : 5 * 1024 * 1024
-    if (file.size > maxSize) {
-      setError(isVideo ? 'Video must be smaller than 25 MB.' : 'Image must be smaller than 5 MB.')
-      return
+    if (event.target) {
+      event.target.value = ''
     }
-
-    setError('')
-    setMediaFile(file)
-    setMediaUrl('')
-    setMediaType(isVideo ? 'video' : 'image')
-    setImagePreview(URL.createObjectURL(file))
   }
 
   const handleInlineImageFileChange = async (event) => {
@@ -522,6 +520,11 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+
+    if (isUploading || isSaving) {
+      return
+    }
+
     setError('')
     setSuccess('')
 
@@ -543,18 +546,19 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     }
 
     const finalHtmlContent = normalizeRichTextContent(richContent || content)
-
-    const mediaUrlToSave = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || initialArticle?.video_url || initialArticle?.image_url
-
-    if (!mediaUrlToSave) {
-      setError('Please select a cover image or MP4 video, or paste a direct media URL before publishing.')
-      return
-    }
+    const previousMediaUrl = initialArticle?.video_url || initialArticle?.image_url || null
 
     try {
       if (initialArticle?.id) {
         setIsSaving(true)
-        await updateNewsArticle({
+        const mediaUrlToSave = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || previousMediaUrl
+
+        if (!mediaUrlToSave) {
+          setError('Please select a cover image or MP4 video, or paste a direct media URL before publishing.')
+          return
+        }
+
+        const updatedArticle = await updateNewsArticle({
           id: initialArticle.id,
           title: headlineHtml,
           content: finalHtmlContent,
@@ -563,25 +567,42 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
           isFeatured,
           language,
         })
+
+        if (mediaFile && previousMediaUrl && previousMediaUrl !== mediaUrlToSave) {
+          try {
+            await cleanupUnusedMedia(previousMediaUrl)
+          } catch {
+            // Keep the database record authoritative and avoid breaking the save flow on cleanup failures.
+          }
+        }
+
         setSuccess('News updated successfully.')
-      } else {
-        setIsUploading(true)
-        const finalMediaUrl = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || initialArticle?.video_url || initialArticle?.image_url
-        setIsUploading(false)
-        setIsSaving(true)
-
-        await publishNewsArticle({
-          title: headlineHtml,
-          content: finalHtmlContent,
-          imageUrl: finalMediaUrl,
-          isBreaking,
-          isFeatured,
-          language,
-        })
-
-        setSuccess('News published successfully.')
+        resetForm()
+        if (updatedArticle) {
+          window.setTimeout(() => onSaved(), 900)
+        }
+        return
       }
 
+      setIsUploading(true)
+      const finalMediaUrl = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || previousMediaUrl
+
+      if (!finalMediaUrl) {
+        setError('Please select a cover image or MP4 video, or paste a direct media URL before publishing.')
+        return
+      }
+
+      setIsSaving(true)
+      await publishNewsArticle({
+        title: headlineHtml,
+        content: finalHtmlContent,
+        imageUrl: finalMediaUrl,
+        isBreaking,
+        isFeatured,
+        language,
+      })
+
+      setSuccess('News published successfully.')
       resetForm()
       window.setTimeout(() => {
         onSaved()
