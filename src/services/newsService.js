@@ -367,28 +367,9 @@ export async function deleteNewsArticle(id) {
     throw new Error('Article ID is required to delete the news item.')
   }
 
-  const { data: articleRows, error: fetchError } = await supabase
-    .from('news')
-    .select('id, image_url, video_url')
-    .eq('id', id)
-    .maybeSingle()
-
-  if (fetchError) {
-    throw new Error(fetchError.message || 'The article could not be loaded for cleanup.')
-  }
-
   const { error } = await supabase.from('news').delete().eq('id', id)
 
   if (error) {
     throw new Error(error.message || 'The article could not be deleted.')
-  }
-
-  const mediaUrls = [articleRows?.image_url, articleRows?.video_url].filter(Boolean)
-  for (const mediaUrl of mediaUrls) {
-    try {
-      await cleanupUnusedMedia(mediaUrl)
-    } catch {
-      // Leave orphaned media alone if cleanup cannot be verified safely.
-    }
   }
 }
