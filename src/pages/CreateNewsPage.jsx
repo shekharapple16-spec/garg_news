@@ -16,6 +16,7 @@ import {
   publishNewsArticle,
   updateNewsArticle,
 } from '../services/newsService.js'
+import { getMediaUploadKey } from '../services/uploadDeduper.js'
 import { validateMediaSelection } from '../lib/mediaOptimization.js'
 
 const ACCEPTED_TYPES = 'image/jpeg,image/jpg,image/png,image/webp,video/mp4'
@@ -152,6 +153,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const [isFeatured, setIsFeatured] = useState(Boolean(initialArticle?.is_featured))
   const [mediaFile, setMediaFile] = useState(null)
   const [mediaUrl, setMediaUrl] = useState(initialArticle?.video_url || initialArticle?.image_url || '')
+  const [uploadedMediaUrl, setUploadedMediaUrl] = useState('')
   const [mediaType, setMediaType] = useState(() => {
     const existingMedia = initialArticle?.video_url || initialArticle?.image_url || ''
     return getMediaTypeFromUrl(existingMedia) || (isVideoAsset(existingMedia) ? 'video' : 'image')
@@ -161,6 +163,19 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const [success, setSuccess] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+
+  const coverUploadRef = useRef({ fileKey: null, url: '' })
+  const inlineUploadRef = useRef({ fileKey: null, url: '' })
+
+  const resetCoverUploadState = (nextFile = null) => {
+    const nextKey = nextFile ? getMediaUploadKey(nextFile) : null
+    const currentKey = coverUploadRef.current.fileKey
+
+    if (!nextFile || !currentKey || currentKey !== nextKey) {
+      coverUploadRef.current = { fileKey: null, url: '' }
+      setUploadedMediaUrl('')
+    }
+  }
 
   useEffect(() => {
     const cleanTitle = normalizeHeadlineRichText(initialArticle?.title || '')
@@ -174,6 +189,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setMediaType(getMediaTypeFromUrl(existingMedia) || (isVideoAsset(existingMedia) ? 'video' : 'image'))
     setImagePreview(existingMedia)
     setMediaFile(null)
+    coverUploadRef.current = { fileKey: null, url: '' }
+    inlineUploadRef.current = { fileKey: null, url: '' }
+    setUploadedMediaUrl('')
     setError('')
     setSuccess('')
   }, [initialArticle])
@@ -360,10 +378,24 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     try {
       validateMediaSelection(file)
       setError('')
+
+      const nextFileKey = getMediaUploadKey(file)
+      const currentUpload = coverUploadRef.current
+      if (currentUpload.fileKey && currentUpload.fileKey !== nextFileKey) {
+        coverUploadRef.current = { fileKey: null, url: '' }
+        setUploadedMediaUrl('')
+      }
+
       setMediaFile(file)
       setMediaUrl('')
       setMediaType(file.type.startsWith('video/') || file.name.toLowerCase().endsWith('.mp4') ? 'video' : 'image')
       setImagePreview(URL.createObjectURL(file))
+
+      if (currentUpload.fileKey === nextFileKey && currentUpload.url) {
+        setUploadedMediaUrl(currentUpload.url)
+      } else {
+        setUploadedMediaUrl('')
+      }
     } catch (validationError) {
       setError(validationError.message || 'The selected file could not be accepted.')
     }
@@ -378,6 +410,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     if (!file) {
       return
     }
+
+    const fileKey = getMediaUploadKey(file)
+    const reusedInlineUrl = inlineUploadRef.current.fileKey === fileKey ? inlineUploadRef.current.url : ''
 
     try {
       const fileType = (file.type || '').toLowerCase()
@@ -394,7 +429,10 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
 
       setError('')
       setIsUploading(true)
-      const uploadedUrl = await uploadNewsMedia(file)
+
+      const uploadedUrl = reusedInlineUrl || (await uploadNewsMedia(file))
+      inlineUploadRef.current = { fileKey, url: uploadedUrl }
+
       const quill = quillRef.current
       if (!quill) {
         throw new Error('The editor is not ready for image insertion.')
@@ -409,6 +447,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       setSuccess('Image added to the article.')
       window.setTimeout(() => setSuccess(''), 1800)
     } catch (uploadError) {
+      inlineUploadRef.current = { fileKey: null, url: '' }
       setError(uploadError.message || 'The image could not be uploaded to the news gallery.')
     } finally {
       setIsUploading(false)
@@ -460,6 +499,8 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       setMediaFile(null)
       setMediaType('image')
       setImagePreview('')
+      coverUploadRef.current = { fileKey: null, url: '' }
+      setUploadedMediaUrl('')
       setError('')
       return
     }
@@ -508,6 +549,9 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setMediaUrl('')
     setMediaType('image')
     setImagePreview('')
+    coverUploadRef.current = { fileKey: null, url: '' }
+    inlineUploadRef.current = { fileKey: null, url: '' }
+    setUploadedMediaUrl('')
     setError('')
     setSuccess('')
     if (headlineQuillRef.current) {
@@ -551,7 +595,21 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     try {
       if (initialArticle?.id) {
         setIsSaving(true)
-        const mediaUrlToSave = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || previousMediaUrl
+
+        let mediaUrlToSave = mediaUrl || previousMediaUrl
+        if (mediaFile) {
+          const selectedFileKey = getMediaUploadKey(mediaFile)
+          const currentUpload = coverUploadRef.current
+
+          if (currentUpload.fileKey === selectedFileKey && currentUpload.url) {
+            mediaUrlToSave = currentUpload.url
+          } else {
+            const uploadedUrl = await uploadNewsMedia(mediaFile)
+            coverUploadRef.current = { fileKey: selectedFileKey, url: uploadedUrl }
+            setUploadedMediaUrl(uploadedUrl)
+            mediaUrlToSave = uploadedUrl
+          }
+        }
 
         if (!mediaUrlToSave) {
           setError('Please select a cover image or MP4 video, or paste a direct media URL before publishing.')
@@ -585,7 +643,21 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       }
 
       setIsUploading(true)
-      const finalMediaUrl = mediaFile ? await uploadNewsMedia(mediaFile) : mediaUrl || previousMediaUrl
+
+      let finalMediaUrl = mediaUrl || previousMediaUrl
+      if (mediaFile) {
+        const selectedFileKey = getMediaUploadKey(mediaFile)
+        const currentUpload = coverUploadRef.current
+
+        if (currentUpload.fileKey === selectedFileKey && currentUpload.url) {
+          finalMediaUrl = currentUpload.url
+        } else {
+          const uploadedUrl = await uploadNewsMedia(mediaFile)
+          coverUploadRef.current = { fileKey: selectedFileKey, url: uploadedUrl }
+          setUploadedMediaUrl(uploadedUrl)
+          finalMediaUrl = uploadedUrl
+        }
+      }
 
       if (!finalMediaUrl) {
         setError('Please select a cover image or MP4 video, or paste a direct media URL before publishing.')

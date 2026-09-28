@@ -14,6 +14,7 @@ import {
   normalizeRichTextContent,
   normalizeRichTextForStorage,
 } from '../lib/translation.js'
+import { getMediaUploadKey, uploadDeduper } from './uploadDeduper.js'
 
 const LOCAL_NEWS_KEY = 'garg-news-admin:news'
 
@@ -92,43 +93,47 @@ export async function uploadNewsMedia(file) {
     throw new Error('Please choose an image or MP4 video before publishing.')
   }
 
-  const mediaInfo = await validateMediaSelection(file)
-  const optimizedFile = mediaInfo.kind === 'image' ? await optimizeNewsImageFile(file) : file
+  const uploadKey = getMediaUploadKey(file)
 
-  const fileType = (optimizedFile.type || file.type || '').toLowerCase()
-  const isVideo = ALLOWED_VIDEO_TYPES.includes(fileType) || (optimizedFile.name || '').toLowerCase().endsWith('.mp4')
-  const allowedTypes = isVideo ? ALLOWED_VIDEO_TYPES : ALLOWED_IMAGE_TYPES
+  return uploadDeduper.wrap(uploadKey, async () => {
+    const mediaInfo = await validateMediaSelection(file)
+    const optimizedFile = mediaInfo.kind === 'image' ? await optimizeNewsImageFile(file) : file
 
-  if (!allowedTypes.includes(fileType) && !((optimizedFile.name || '').toLowerCase().endsWith('.mp4') || /\.(jpe?g|png|webp)$/i.test(optimizedFile.name || ''))) {
-    if (isVideo) {
-      throw new Error('Only MP4 videos are allowed.')
+    const fileType = (optimizedFile.type || file.type || '').toLowerCase()
+    const isVideo = ALLOWED_VIDEO_TYPES.includes(fileType) || (optimizedFile.name || '').toLowerCase().endsWith('.mp4')
+    const allowedTypes = isVideo ? ALLOWED_VIDEO_TYPES : ALLOWED_IMAGE_TYPES
+
+    if (!allowedTypes.includes(fileType) && !((optimizedFile.name || '').toLowerCase().endsWith('.mp4') || /\.(jpe?g|png|webp)$/i.test(optimizedFile.name || ''))) {
+      if (isVideo) {
+        throw new Error('Only MP4 videos are allowed.')
+      }
+
+      throw new Error('Only JPG, JPEG, PNG, and WEBP images are allowed.')
     }
 
-    throw new Error('Only JPG, JPEG, PNG, and WEBP images are allowed.')
-  }
+    const extension = ((optimizedFile.name || '').includes('.') ? optimizedFile.name.split('.').pop() : isVideo ? 'mp4' : 'jpg').toLowerCase()
+    const uniqueName = `news-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
 
-  const extension = ((optimizedFile.name || '').includes('.') ? optimizedFile.name.split('.').pop() : isVideo ? 'mp4' : 'jpg').toLowerCase()
-  const uniqueName = `news-${Date.now()}-${Math.random().toString(16).slice(2)}.${extension}`
+    const { error: uploadError } = await supabase.storage
+      .from('news-image')
+      .upload(uniqueName, optimizedFile, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: optimizedFile.type || fileType,
+      })
 
-  const { error: uploadError } = await supabase.storage
-    .from('news-image')
-    .upload(uniqueName, optimizedFile, {
-      cacheControl: '3600',
-      upsert: false,
-      contentType: optimizedFile.type || fileType,
-    })
+    if (uploadError) {
+      throw new Error(uploadError.message || 'Media upload failed. Please try again.')
+    }
 
-  if (uploadError) {
-    throw new Error(uploadError.message || 'Media upload failed. Please try again.')
-  }
+    const { data: publicUrlData } = supabase.storage.from('news-image').getPublicUrl(uniqueName)
 
-  const { data: publicUrlData } = supabase.storage.from('news-image').getPublicUrl(uniqueName)
+    if (!publicUrlData?.publicUrl) {
+      throw new Error('Media URL could not be generated after upload.')
+    }
 
-  if (!publicUrlData?.publicUrl) {
-    throw new Error('Media URL could not be generated after upload.')
-  }
-
-  return publicUrlData.publicUrl
+    return publicUrlData.publicUrl
+  })
 }
 
 export async function uploadNewsImage(file) {
