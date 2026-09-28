@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { getStoragePathFromPublicUrl } from '../lib/mediaPaths.js'
+import { getNewsMediaUrls } from './newsService.js'
 import { getMediaUploadKey, uploadDeduper } from './uploadDeduper.js'
 
 test('extracts the storage object path from a public Supabase URL', () => {
@@ -58,4 +59,33 @@ test('does not permanently dedupe sequential calls after the first upload resolv
   assert.equal(first, 'url-1')
   assert.equal(second, 'url-2')
   assert.equal(invocations, 2)
+})
+
+test('extracts a valid storage path from a public Supabase URL', () => {
+  const url = 'https://example.supabase.co/storage/v1/object/public/news-image/news-123/image.jpg'
+  assert.equal(getStoragePathFromPublicUrl(url), 'news-123/image.jpg')
+})
+
+test('extracts all storage paths from multiple media URLs without duplicating entries', () => {
+  const urls = [
+    'https://example.supabase.co/storage/v1/object/public/news-image/news-123/image.jpg',
+    'https://example.supabase.co/storage/v1/object/public/news-image/news-123/image.jpg',
+    'https://example.supabase.co/storage/v1/object/public/news-image/video/clip.mp4',
+  ]
+
+  const storagePaths = [...new Set(urls.map((url) => getStoragePathFromPublicUrl(url)).filter(Boolean))]
+
+  assert.deepEqual(storagePaths, ['news-123/image.jpg', 'video/clip.mp4'])
+})
+
+test('collects only media URLs actually present on a news row without querying missing columns', () => {
+  const article = {
+    id: '123',
+    image_url: 'https://example.supabase.co/storage/v1/object/public/news-image/news-123/image.jpg',
+    status: 'draft',
+  }
+
+  const urls = getNewsMediaUrls(article)
+
+  assert.deepEqual(urls, ['https://example.supabase.co/storage/v1/object/public/news-image/news-123/image.jpg'])
 })

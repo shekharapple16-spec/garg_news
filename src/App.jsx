@@ -78,6 +78,13 @@ function App() {
   }
 
   const handleDeleteNews = async (id) => {
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm('Are you sure you want to delete this story? This action cannot be undone.')
+      if (!confirmed) {
+        return
+      }
+    }
+
     try {
       await deleteNewsArticle(id)
       await refreshNews()

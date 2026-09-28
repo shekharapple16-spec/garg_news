@@ -51,6 +51,26 @@ const sortNewsItems = (items = []) =>
     return dateB - dateA
   })
 
+export function getNewsMediaUrls(article = {}) {
+  const mediaUrls = []
+
+  if (typeof article.image_url === 'string') {
+    const trimmedImageUrl = article.image_url.trim()
+    if (trimmedImageUrl) {
+      mediaUrls.push(trimmedImageUrl)
+    }
+  }
+
+  if (typeof article.video_url === 'string') {
+    const trimmedVideoUrl = article.video_url.trim()
+    if (trimmedVideoUrl) {
+      mediaUrls.push(trimmedVideoUrl)
+    }
+  }
+
+  return [...new Set(mediaUrls)]
+}
+
 export async function fetchPublishedNews() {
   try {
     const { data, error } = await supabase
@@ -343,17 +363,14 @@ export async function cleanupUnusedMedia(publicUrl) {
 
   const { data: referencedRows, error: referenceError } = await supabase
     .from('news')
-    .select('id, image_url, video_url')
-    .or(`image_url.eq.${publicUrl},video_url.eq.${publicUrl}`)
+    .select('id, image_url')
+    .eq('image_url', publicUrl)
 
   if (referenceError) {
     throw new Error(referenceError.message || 'Unable to verify media references before cleanup.')
   }
 
-  const hasOtherReferences = (referencedRows || []).some((row) => {
-    const matchesCurrentUrl = row.image_url === publicUrl || row.video_url === publicUrl
-    return matchesCurrentUrl
-  })
+  const hasOtherReferences = (referencedRows || []).some((row) => row.image_url === publicUrl)
 
   if (hasOtherReferences) {
     return false
@@ -372,9 +389,30 @@ export async function deleteNewsArticle(id) {
     throw new Error('Article ID is required to delete the news item.')
   }
 
-  const { error } = await supabase.from('news').delete().eq('id', id)
+  const { data: article, error: fetchError } = await supabase
+    .from('news')
+    .select('id, image_url')
+    .eq('id', id)
+    .maybeSingle()
 
-  if (error) {
-    throw new Error(error.message || 'The article could not be deleted.')
+  if (fetchError) {
+    throw new Error(fetchError.message || 'The article could not be loaded before deletion.')
   }
+
+  const deleteResult = await supabase.from('news').delete().eq('id', id)
+  if (deleteResult.error) {
+    throw new Error(deleteResult.error.message || 'The article could not be deleted.')
+  }
+
+  const mediaUrls = getNewsMediaUrls(article ?? {})
+  const storagePaths = [...new Set(mediaUrls.map((mediaUrl) => getStoragePathFromSupabaseUrl(mediaUrl)).filter(Boolean))]
+
+  if (storagePaths.length > 0) {
+    const { error: removeError } = await supabase.storage.from('news-image').remove(storagePaths)
+    if (removeError) {
+      throw new Error(removeError.message || 'The article was deleted, but the attached media could not be removed from storage.')
+    }
+  }
+
+  return true
 }
