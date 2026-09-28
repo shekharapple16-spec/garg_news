@@ -6,7 +6,6 @@ import {
   normalizeHeadlineRichText,
   normalizePlainTextContent,
   normalizeRichTextContent,
-  transliterateHindiToPunjabi,
   transliterateHtmlToPunjabi,
   transliteratePunjabiToHindi,
 } from '../lib/translation.js'
@@ -153,7 +152,6 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const [isFeatured, setIsFeatured] = useState(Boolean(initialArticle?.is_featured))
   const [mediaFile, setMediaFile] = useState(null)
   const [mediaUrl, setMediaUrl] = useState(initialArticle?.video_url || initialArticle?.image_url || '')
-  const [uploadedMediaUrl, setUploadedMediaUrl] = useState('')
   const [mediaType, setMediaType] = useState(() => {
     const existingMedia = initialArticle?.video_url || initialArticle?.image_url || ''
     return getMediaTypeFromUrl(existingMedia) || (isVideoAsset(existingMedia) ? 'video' : 'image')
@@ -167,17 +165,7 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
   const coverUploadRef = useRef({ fileKey: null, url: '' })
   const inlineUploadRef = useRef({ fileKey: null, url: '' })
 
-  const resetCoverUploadState = (nextFile = null) => {
-    const nextKey = nextFile ? getMediaUploadKey(nextFile) : null
-    const currentKey = coverUploadRef.current.fileKey
-
-    if (!nextFile || !currentKey || currentKey !== nextKey) {
-      coverUploadRef.current = { fileKey: null, url: '' }
-      setUploadedMediaUrl('')
-    }
-  }
-
-  useEffect(() => {
+  const applyInitialArticle = () => {
     const cleanTitle = normalizeHeadlineRichText(initialArticle?.title || '')
     setHeadline(cleanTitle)
     setContent(initialArticle?.content || '')
@@ -191,9 +179,12 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setMediaFile(null)
     coverUploadRef.current = { fileKey: null, url: '' }
     inlineUploadRef.current = { fileKey: null, url: '' }
-    setUploadedMediaUrl('')
     setError('')
     setSuccess('')
+  }
+
+  useEffect(() => {
+    applyInitialArticle()
   }, [initialArticle])
 
   useEffect(() => {
@@ -383,7 +374,6 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       const currentUpload = coverUploadRef.current
       if (currentUpload.fileKey && currentUpload.fileKey !== nextFileKey) {
         coverUploadRef.current = { fileKey: null, url: '' }
-        setUploadedMediaUrl('')
       }
 
       setMediaFile(file)
@@ -391,10 +381,8 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       setMediaType(file.type.startsWith('video/') || file.name.toLowerCase().endsWith('.mp4') ? 'video' : 'image')
       setImagePreview(URL.createObjectURL(file))
 
-      if (currentUpload.fileKey === nextFileKey && currentUpload.url) {
-        setUploadedMediaUrl(currentUpload.url)
-      } else {
-        setUploadedMediaUrl('')
+      if (currentUpload.fileKey !== nextFileKey) {
+        coverUploadRef.current = { fileKey: nextFileKey, url: '' }
       }
     } catch (validationError) {
       setError(validationError.message || 'The selected file could not be accepted.')
@@ -500,7 +488,6 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
       setMediaType('image')
       setImagePreview('')
       coverUploadRef.current = { fileKey: null, url: '' }
-      setUploadedMediaUrl('')
       setError('')
       return
     }
@@ -551,7 +538,6 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
     setImagePreview('')
     coverUploadRef.current = { fileKey: null, url: '' }
     inlineUploadRef.current = { fileKey: null, url: '' }
-    setUploadedMediaUrl('')
     setError('')
     setSuccess('')
     if (headlineQuillRef.current) {
@@ -606,7 +592,6 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
           } else {
             const uploadedUrl = await uploadNewsMedia(mediaFile)
             coverUploadRef.current = { fileKey: selectedFileKey, url: uploadedUrl }
-            setUploadedMediaUrl(uploadedUrl)
             mediaUrlToSave = uploadedUrl
           }
         }
@@ -654,7 +639,6 @@ export function CreateNewsPage({ initialArticle = null, onSaved, onCancel }) {
         } else {
           const uploadedUrl = await uploadNewsMedia(mediaFile)
           coverUploadRef.current = { fileKey: selectedFileKey, url: uploadedUrl }
-          setUploadedMediaUrl(uploadedUrl)
           finalMediaUrl = uploadedUrl
         }
       }

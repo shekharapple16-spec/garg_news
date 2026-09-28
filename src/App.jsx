@@ -29,7 +29,7 @@ function App() {
       setLoadingNews(true)
       const articles = await fetchPublishedNews()
       setNews(articles)
-    } catch (error) {
+    } catch {
       setNews([])
     } finally {
       setLoadingNews(false)
@@ -40,7 +40,7 @@ function App() {
     try {
       const allArticles = await fetchAllNews()
       setDrafts(allArticles.filter((item) => item.status !== 'published'))
-    } catch (error) {
+    } catch {
       setDrafts([])
     }
   }
@@ -136,10 +136,16 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (session) {
-      refreshNews()
-      refreshDrafts()
+    if (!session) {
+      return
     }
+
+    const refreshLists = async () => {
+      await refreshNews()
+      await refreshDrafts()
+    }
+
+    refreshLists()
   }, [session])
 
   const handleLogin = async ({ email, password }) => {

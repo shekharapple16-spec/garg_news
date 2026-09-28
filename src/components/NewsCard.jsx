@@ -30,7 +30,7 @@ const isVideoAsset = (value) => {
   return normalized.endsWith('.mp4') || normalized.includes('/video/') || normalized.includes('video')
 }
 
-export function NewsCard({ item, onEdit, onTogglePublish, onDelete }) {
+export function NewsCard({ item }) {
   const mediaUrl = item.video_url || item.image_url
   const isVideo = isVideoAsset(mediaUrl)
 

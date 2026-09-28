@@ -8,8 +8,8 @@ const getEnvValue = (name) => {
     }
   }
 
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[name]
+  if (typeof globalThis !== 'undefined' && globalThis.process && globalThis.process.env) {
+    return globalThis.process.env[name]
   }
 
   return undefined

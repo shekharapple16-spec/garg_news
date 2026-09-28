@@ -15,7 +15,7 @@ export function useAuth() {
         if (isMounted) {
           setSession(currentSession)
         }
-      } catch (error) {
+      } catch {
         if (isMounted) {
           setSession(null)
         }

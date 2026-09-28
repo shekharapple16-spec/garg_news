@@ -94,7 +94,8 @@ export async function validateMediaSelection(file, { allowVideo = true } = {}) {
       throw new Error('Image dimensions are too large. Please upload a smaller photo.')
     }
   } catch (error) {
-    throw new Error(error.message || 'The selected image could not be validated.')
+    const message = error instanceof Error ? error.message : 'The selected image could not be validated.'
+    throw new Error(message, { cause: error })
   }
 
   return { kind: 'image', file }

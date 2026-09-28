@@ -2,8 +2,6 @@ import { getStoragePathFromPublicUrl as getStoragePathFromSupabaseUrl } from '..
 import {
   ALLOWED_IMAGE_TYPES,
   ALLOWED_VIDEO_TYPES,
-  MAX_IMAGE_SIZE,
-  MAX_VIDEO_SIZE,
   optimizeNewsImageFile,
   validateMediaSelection,
 } from '../lib/mediaOptimization.js'
@@ -84,7 +82,7 @@ export async function fetchPublishedNews() {
     }
 
     return data ?? []
-  } catch (error) {
+  } catch {
     const localNews = readLocalNews()
     return sortNewsItems(localNews.filter((item) => item.status === 'published'))
   }
@@ -102,7 +100,7 @@ export async function fetchAllNews() {
     }
 
     return data ?? []
-  } catch (error) {
+  } catch {
     const localNews = readLocalNews()
     return sortNewsItems(localNews)
   }
